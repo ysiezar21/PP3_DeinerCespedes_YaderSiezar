@@ -1,0 +1,128 @@
+_mi_:
+param_1_int _dif_
+param_2_char _otra_
+_str_ = "Hola $~&¡¡:|$& |>  mundo"
+_var_ = 10
+_mi__do1:
+_mi__do2:
+t1 = _var_ - 1
+_var_ = t1
+t2 = 34 + 35
+t3 = 12 >= t2
+t4 = !t3
+t5 = true && t4
+if t5 goto _mi__do2
+_mi__do2_end:
+t6 = 12 >= 35
+ifFalse t6 goto _mi__else1
+_mi__if1:
+write,string,"entra al if"
+_mi__else1:
+_mi__endif1:
+ifFalse true goto _mi__else2
+_mi__if2:
+write,int,_var_
+goto _mi__endif2
+_mi__else2:
+t7 = _otra_
+tsw1 = 1
+t8 = t7
+goto _mi__do1_switch1_case1
+
+_mi__do1_switch1_case1:
+t9 = tsw1
+t10 = t9 == 0
+if t10 goto _mi__do1_switch1_case1_end
+t11 = '1'
+t12 = t8 == t11
+if t12 goto _mi__do1_switch1_case1_b
+goto _mi__do1_switch1_case1_end
+
+_mi__do1_switch1_case1_b:
+t13 = 0
+tsw1 = t13
+write,string,"!¡¡"
+goto _mi__do1_switch1_case1_end
+
+_mi__do1_switch1_case1_end:
+goto _mi__do1_switch1_case2
+
+_mi__do1_switch1_case2:
+t14 = tsw1
+t15 = t14 == 0
+if t15 goto _mi__do1_switch1_case2_end
+t16 = '2'
+t17 = t8 == t16
+if t17 goto _mi__do1_switch1_case2_b
+goto _mi__do1_switch1_case2_end
+
+_mi__do1_switch1_case2_b:
+t18 = 0
+tsw1 = t18
+_otra_ = '1'
+goto _mi__do1_switch1_end
+goto _mi__do1_switch1_case2_end
+
+_mi__do1_switch1_case2_end:
+goto _mi__do1_switch1_default
+
+_mi__do1_switch1_default:
+t19 = tsw1
+t20 = t19 == 0
+if t20 goto _mi__do1_switch1_default_end
+goto _mi__do1_switch1_default_b
+
+_mi__do1_switch1_default_b:
+t21 = 0
+tsw1 = t21
+_otra_ = 'a'
+goto _mi__do1_switch1_default_end
+
+_mi__do1_switch1_default_end:
+goto _mi__do1_switch1_end
+_mi__do1_switch1_end:
+t22 = _otra_
+tsw2 = 1
+t23 = t22
+goto _mi__do1_switch2_case1
+
+_mi__do1_switch2_case1:
+t24 = tsw2
+t25 = t24 == 0
+if t25 goto _mi__do1_switch2_case1_end
+t26 = '0'
+t27 = t23 == t26
+if t27 goto _mi__do1_switch2_case1_b
+goto _mi__do1_switch2_case1_end
+
+_mi__do1_switch2_case1_b:
+t28 = 0
+tsw2 = t28
+write,string,"un case"
+goto _mi__do1_switch2_case1_end
+
+_mi__do1_switch2_case1_end:
+goto _mi__do1_switch2_case2
+_mi__do1_switch2_end:
+_mi__endif2:
+t29 = !false
+if t29 goto _mi__do1
+_mi__do1_end:
+return 1.2
+_miOtraFun_:
+return false
+main:
+_i_ = 10
+t30 = 67 + _i_
+t31 = 21 * 10
+t32 = t31 + t30
+t33 = _arr_[t32]
+t34 = -0.01
+t35 = t34 + 10e10
+t33 = t35
+_b1_ = true
+read _s1_
+write,bool,_b1_
+write,bool,true
+t36 = -6//7
+write,float,t36

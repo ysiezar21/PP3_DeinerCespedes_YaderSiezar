@@ -1,0 +1,106 @@
+
+    float~func1 <| char~x22,char~x24 |>  |: ¡¡semantico borrar parametro
+	string~sss<-"Hola"!
+	int~numero! int~g! char~letra! float~f! numero <- 20 + 21!¡¡ semantico, verificar que hayan sido asignados 
+	g <- numero + 10! ¡¡ semantico inicializacion
+	numero <- 10 * g / g! ¡¡ semantico
+	numero <- - 77! ¡¡ confirmacion de error negativo
+	letra <- x24! ¡¡ semantico asignacion tipo
+	letra <- 'b'! ¡¡ semantico no existente
+	cout~ <| numero |> !
+	cout ~<| sss |> ! ¡¡ semantico tipo imprime
+	cin ~<| f |> ! ¡¡ semantico tipo lee, cambiar por f y validar inicializacion adelante
+	int~numS <- numero - 1 * numero + numero !
+	cout~ <| numS |> !
+
+	float~ff <--0.01! ¡¡semántico, aplica global
+	char~x23<-'a'! ¡¡semantico x22 duplicado
+	char~_miChar_<-'!' !
+	char~_miChar2_<-'!'! 
+	int~_x30_<--1!
+	bool~_x40_<-false!
+	float~_x50_<<1>><<2>> <- |:|:4,5:|:|! ¡¡semantico tipo
+	float~_x502_<<1>><<2>> <- |:|:5.5,6.4,7.2:|:|! ¡¡semantico, tamaño
+	string~_x500_<-"Hola a todos los que est<<a>> haciendo un compilador nuevo|:n"!
+	_x30_ <- ++g!¡¡semantico, probar con arreglo
+	
+	if ~<| less_te<|f+5,45|> @ greather_t<|g,5.6|> |>  |:  ¡¡semantico x22, var __relacional__ x2
+		int~y!
+		x22<-x23!¡¡semantico
+		char~ch33<-'a'!
+	 :|
+	else~ |: 
+		int~y! ¡¡ semantico no error duplicado en if-else
+		string~str2<-"sdff"!
+	 :|
+	if ~<| n_equal<|_x40_@true,true|> # greather_t<|5.5,5.6+f|> |>  |:  ¡¡semantico diferente logico __relacional__ x2
+		int~y!
+		f<-10!¡¡semantico
+		char~ch33<-'a'!
+	 :|
+	do ~ |: cout~ <| "Hola" |> ! numero <- 33!  ff <--0.02 * -3.7!  :| while~ <|true@true|>!  ¡¡semantico condicion
+	cout~ <| "Hola mundo" |> !
+
+	switch~ <|g|> |: ¡¡semantico
+		case~ 12: ¡¡semantico/sintactico
+			cout~<|g|>! g <- 20! cout~<|ff|>!
+			break!
+		case~ 78: ¡¡semantico
+			cout~<|ff|>! g <- 21! cout~<|ff|>!
+		default:
+			cout~<|g|>! g <- 22! cout~<|g|>!
+	:|
+
+	cin ~<| f |> ! ¡¡semantico tipo
+	return~-5.6!¡¡cambio en retorno genera semantico
+	 cin ~<| g |> ! ¡¡semantico ?
+ :|  
+
+ bool~_func2_  <| bool~_b1_, int~_i1_ |>   |: 
+	¡¡return~! ¡¡semantico generar error por ausencia, con -5.6 y con i1
+	int~j ! 
+  :|  
+
+bool~_func3_  <|  |>   |:  ¡¡semantico string~
+	string~_b1_ <- "Hola"! 
+	¡¡return~ _b1_!
+  :|
+
+int~_func5_  <| bool~b1|>   |: 
+	int~j !
+	¡¡return~ true! 
+  :| 
+
+  bool~_func6_  <| bool~b1|>   |:  ¡¡semantico funcion repetida
+	int~j ! 
+	if ~<| true |>  |:
+		int~y!
+		char~ch33<-'a'!
+	 :|
+	return~ true!
+  :| 
+
+empty ~__main__ <| |>  |: 
+	char~miChar<-'!'!
+	char~miChar2<-'!'! 
+	string~str1<-"Mi string~1"!
+	float~fl1<-1.1! int~in2<-10! 
+	float~fl2<-56.6! ¡¡semantico fl1
+	float~in1<- --fl1- -14%++in2 + ++in2 / 15 * -30e50 / -10//3! ¡¡semantico fl1, in1, semantico division
+	float~fl3<-3.7 ^ fl1 + 10 + <| 45 % 76 |> ! ¡¡semantico literal 76, potencia
+	
+¡¡comentario 2
+	float~arr<<1>><<2>> <- |:|:4.4,5.5:|:|! 
+	arr<<in2+1>><<in2+2>> <- 10 - arr<<67+in2>><<67+in2>> * func1  <| miChar, 'a' |> ! ¡¡semantico func1, retorno func1, tipo arreglo
+	fl1 <- 45%in2^-5! ¡¡semantico miChar
+	_func2_ <| _func3_ <|  |> ,3 |> ! ¡¡semantico miFunc, hola
+	bool~bl0 <- n_equal<|6.7*1.1,8.9|>! ¡¡ok __relacional__
+	bl0 <- n_equal<| true, greather_t<|5,4|> |>! ¡¡ok __relacional__ x2
+	bool~bl1 <- greather_te<|in1,fl1|> # false @ $ <| greather_t<|_func5_ <| true |> , 56|> |> ! ¡¡semantico in1 >= fl1, func2 __relacional__ x2
+
+ 	do ~ |:
+        int~_i_!
+	:| while~ <| greather_t<|++in2,12.2|> @ $ <| greather_t<|12, <|34+35|> |> |>  |> ! ¡¡semantico __relacional__ x2
+ 
+	¡¡return~   bl1! ¡¡semantico
+ :| 

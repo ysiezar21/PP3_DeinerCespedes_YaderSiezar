@@ -1,0 +1,124 @@
+func1:
+param_1_char x22
+param_2_char x22
+t1 = -0.01
+a = t1
+_x22_ = 'a'
+_miChar_ = '!'
+_miChar2_ = '!'
+t2 = -1
+_x30_ = t2
+_x40_ = false
+t3 = -100e10
+t4 = 100e10 + t3
+_ = t4
+t5 = -5//6
+t6 = t5 + 9//16
+_ = t6
+_x50_ = "Hola a todos los $ que est<<a>> haciendo un compilador nuevo|:n"
+t7 = x22 <= 45
+t8 = _error_ > 5//6
+t9 = t7 && t8
+ifFalse t9 goto func1_else1
+func1_if1:
+x22 = 10
+ch33 = 'a'
+goto func1_endif1
+func1_else1:
+str2 = "sdff"
+func1_endif1:
+t10 = 5 == 3
+ifFalse t10 goto func1_else2
+func1_if2:
+func1_else2:
+func1_endif2:
+func1_do1:
+write,error,_error_
+t11 = call f, 0
+t12 = _error_ == _error_
+param_1_error _error_
+t13 = call f1, 1
+param_1_int 1
+param_2_char 'c'
+param_3_string "d"
+param_4_error t13
+t14 = call f1, 4
+t15 = _error_ <= t14
+t16 = t12 && t15
+t17 = !false
+t18 = t16 || t17
+if t18 goto func1_do1
+func1_do1_end:
+write,string,"Hola mundo"
+write,error,_error_
+read _x22_
+t19 = -5.6
+return t19
+_func2_:
+param_1_bool _b1_
+param_2_int _i1_
+return b
+t20 = 5 == 3
+ifFalse t20 goto _func2__else1
+_func2__if1:
+goto _func2__endif1
+_func2__else1:
+_func2__endif1:
+t21 = 5 == 3
+ifFalse t21 goto _func2__else2
+_func2__if2:
+_func2__else2:
+_func2__endif2:
+_func3_:
+return _b1_
+main:
+miChar = '!'
+miChar2 = '!'
+str1 = "Mi string 1"
+t22 = 56.6 / 6//8
+fl1 = t22
+fl1 = fl1 - 1
+t23 = -14
+t24 = fl1 - t23
+in1 = _error_
+t25 = 3.7 ^ fl1
+fl2 = _error_
+t26 = 5 == 3
+ifFalse t26 goto main_else1
+main_if1:
+main_else1:
+main_endif1:
+t27 = call f, 0
+param_1_char _error_
+param_2_char true
+param_3_string "hola mundo"
+param_4_float 4.5
+param_5_char 'a'
+t28 = call func1, 5
+arr = _error_
+t29 = call f, 0
+_error_ = 1//1
+t30 = -0.005
+fl1 = _error_
+t31 = call miFunc, 0
+param_1_error t31
+param_2_char 'a'
+t32 = call miFunc, 2
+t33 = 6.7 != 8//9
+bl0 = t33
+t34 = 1 + 1
+t35 = 2 * 2
+t36 = t34 == t35
+t37 = true != t36
+t38 = !t37
+bl0 = t38
+t39 = in1 > fl1
+t40 = t39 || false
+param_1_int 3
+param_2_int in1
+t41 = call func2, 2
+t42 = t41 >= 56
+t43 = !t42
+t44 = t40 && t43
+bl1 = t44
+return bl1

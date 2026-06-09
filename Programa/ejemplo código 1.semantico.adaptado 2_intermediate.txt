@@ -1,0 +1,222 @@
+func1:
+param_1_char x22
+param_2_char x24
+sss = "Hola"
+t1 = 20 + 21
+numero = t1
+t2 = numero + 10
+g = t2
+t3 = 10 * g
+t4 = t3 / g
+numero = t4
+t5 = -77
+numero = t5
+letra = x24
+letra = 'b'
+write,int,numero
+write,string,sss
+read f
+t6 = 1 * numero
+t7 = numero - t6
+t8 = t7 + numero
+numS = t8
+write,int,numS
+t9 = -0.01
+ff = t9
+x23 = 'a'
+_miChar_ = '!'
+_miChar2_ = '!'
+t10 = -1
+_x30_ = t10
+_x40_ = false
+_x500_ = "Hola a todos los que est<<a>> haciendo un compilador nuevo|:n"
+g = g + 1
+_x30_ = g
+t11 = f + 5
+t12 = t11 <= 45
+t13 = g > 5.6
+t14 = t12 && t13
+ifFalse t14 goto func1_else1
+func1_if1:
+x22 = x23
+ch33 = 'a'
+goto func1_endif1
+func1_else1:
+str2 = "sdff"
+func1_endif1:
+t15 = _x40_ && true
+t16 = t15 != true
+t17 = 5.6 + f
+t18 = 5.5 > t17
+t19 = t16 || t18
+ifFalse t19 goto func1_else2
+func1_if2:
+f = 10
+ch33 = 'a'
+func1_else2:
+func1_endif2:
+func1_do1:
+write,string,"Hola"
+numero = 33
+t20 = -0.02
+t21 = -3.7
+t22 = t20 * t21
+ff = t22
+t23 = true && true
+if t23 goto func1_do1
+func1_do1_end:
+write,string,"Hola mundo"
+t24 = g
+tsw1 = 1
+t25 = t24
+goto func1_do1_switch1_case1
+
+func1_do1_switch1_case1:
+t26 = tsw1
+t27 = t26 == 0
+if t27 goto func1_do1_switch1_case1_end
+t28 = 12
+t29 = t25 == t28
+if t29 goto func1_do1_switch1_case1_b
+goto func1_do1_switch1_case1_end
+
+func1_do1_switch1_case1_b:
+t30 = 0
+tsw1 = t30
+write,int,g
+g = 20
+write,float,ff
+goto func1_do1_switch1_end
+goto func1_do1_switch1_case1_end
+
+func1_do1_switch1_case1_end:
+goto func1_do1_switch1_case2
+
+func1_do1_switch1_case2:
+t31 = tsw1
+t32 = t31 == 0
+if t32 goto func1_do1_switch1_case2_end
+t33 = 78
+t34 = t25 == t33
+if t34 goto func1_do1_switch1_case2_b
+goto func1_do1_switch1_case2_end
+
+func1_do1_switch1_case2_b:
+t35 = 0
+tsw1 = t35
+write,float,ff
+g = 21
+write,float,ff
+goto func1_do1_switch1_case2_end
+
+func1_do1_switch1_case2_end:
+goto func1_do1_switch1_default
+
+func1_do1_switch1_default:
+t36 = tsw1
+t37 = t36 == 0
+if t37 goto func1_do1_switch1_default_end
+goto func1_do1_switch1_default_b
+
+func1_do1_switch1_default_b:
+t38 = 0
+tsw1 = t38
+write,int,g
+g = 22
+write,int,g
+goto func1_do1_switch1_default_end
+
+func1_do1_switch1_default_end:
+goto func1_do1_switch1_end
+func1_do1_switch1_end:
+read f
+t39 = -5.6
+return t39
+read g
+_func2_:
+param_1_bool _b1_
+param_2_int _i1_
+_func3_:
+_b1_ = "Hola"
+_func5_:
+param_1_bool b1
+_func6_:
+param_1_bool b1
+ifFalse true goto _func6__else1
+_func6__if1:
+ch33 = 'a'
+_func6__else1:
+_func6__endif1:
+return true
+main:
+miChar = '!'
+miChar2 = '!'
+str1 = "Mi string~1"
+fl1 = 1.1
+in2 = 10
+fl2 = 56.6
+fl1 = fl1 - 1
+t40 = -14
+in2 = in2 + 1
+t41 = t40 % in2
+t42 = fl1 - t41
+in2 = in2 + 1
+t43 = in2 / 15
+t44 = -30e50
+t45 = t43 * t44
+t46 = -10//3
+t47 = t45 / t46
+t48 = t42 + t47
+in1 = t48
+t49 = 3.7 ^ fl1
+t50 = t49 + 10
+t51 = 45 % 76
+t52 = t50 + t51
+fl3 = t52
+t53 = in2 + 1
+t54 = in2 + 2
+t55 = t53 * 2
+t56 = t55 + t54
+t57 = arr[t56]
+t58 = 67 + in2
+t59 = 67 + in2
+t60 = t58 * 2
+t61 = t60 + t59
+t62 = arr[t61]
+param_1_char miChar
+param_2_char 'a'
+t63 = call func1, 2
+t64 = t62 * t63
+t65 = 10 - t64
+t57 = t65
+t66 = -5
+t67 = in2 ^ t66
+t68 = 45 % t67
+fl1 = t68
+t69 = call _func3_, 0
+param_1_bool t69
+param_2_int 3
+t70 = call _func2_, 2
+t71 = 6.7 * 1.1
+t72 = t71 != 8.9
+bl0 = t72
+t73 = 5 > 4
+t74 = true != t73
+bl0 = t74
+t75 = in1 >= fl1
+t76 = t75 || false
+param_1_bool true
+t77 = call _func5_, 1
+t78 = t77 > 56
+t79 = !t78
+t80 = t76 && t79
+bl1 = t80
+main_do1:
+in2 = in2 + 1
+t81 = in2 > 12.2
+t82 = 34 + 35
+t83 = 12 > t82
+t84 = !t83
+t85 = t81 && t84
+if t85 goto main_do1
+main_do1_end:

@@ -1,0 +1,59 @@
+main:
+a = 10
+t1 = a
+tsw1 = 1
+t2 = t1
+goto main_switch1_case1
+
+main_switch1_case1:
+t3 = tsw1
+t4 = t3 == 0
+if t4 goto main_switch1_case1_end
+t5 = 5
+t6 = t2 == t5
+if t6 goto main_switch1_case1_b
+goto main_switch1_case1_end
+
+main_switch1_case1_b:
+t7 = 0
+tsw1 = t7
+a = 5
+goto main_switch1_end
+goto main_switch1_case1_end
+
+main_switch1_case1_end:
+goto main_switch1_case2
+
+main_switch1_case2:
+t8 = tsw1
+t9 = t8 == 0
+if t9 goto main_switch1_case2_end
+t10 = 10
+t11 = t2 == t10
+if t11 goto main_switch1_case2_b
+goto main_switch1_case2_end
+
+main_switch1_case2_b:
+t12 = 0
+tsw1 = t12
+a = 10
+goto main_switch1_case2_end
+
+main_switch1_case2_end:
+goto main_switch1_default
+
+main_switch1_default:
+t13 = tsw1
+t14 = t13 == 0
+if t14 goto main_switch1_default_end
+goto main_switch1_default_b
+
+main_switch1_default_b:
+t15 = 0
+tsw1 = t15
+a = 0
+goto main_switch1_default_end
+
+main_switch1_default_end:
+goto main_switch1_end
+main_switch1_end:
