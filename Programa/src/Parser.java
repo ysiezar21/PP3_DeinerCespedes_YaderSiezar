@@ -823,8 +823,11 @@ public class Parser extends java_cup.runtime.lr_parser {
     // Lista de instrucciones generadas
     private List<String> code = new ArrayList<>();
 
-    // Contador de temporales (t1, t2, t3...)
-    private int tempCount  = 0;
+    // Contador de temporales (t1, t2, t3...) — GLOBAL e incremental
+    private int tempCount = 0;
+
+    // Contador GLOBAL de variables declaradas (var_1_tipo, var_2_tipo...)
+    private int varDeclCount = 0;
 
     // Contador de banderas para los switch (tsw1, tsw2...)
     private int switchFlagCounter = 0;
@@ -832,10 +835,29 @@ public class Parser extends java_cup.runtime.lr_parser {
     // Nombre base del archivo fuente (sin extension)
     public String sourceFileName = "";
 
-    // Genera un nuevo temporal
+    // ── SWITCH: indica si el case actual ya emitio un 'break' ──────
+    // Se reinicia a false al entrar a cada case_stmt_cond y se activa
+    // en true cuando se procesa BREAK dentro de un switch.
+    private boolean currentCaseHadBreak = false;
+
+    // Genera un nuevo temporal — GLOBAL e incremental 
     private String newTemp() {
         tempCount++;
         return "t" + tempCount;
+    }
+
+    /**
+     * Carga un valor (literal o variable) a un temporal si aun no es un temporal.
+     * Si el dir ya es un temporal (t\d+), lo devuelve tal cual.
+     * nunca usar literales/variables directamente.
+     */
+    private String loadToTemp(String dir) {
+        if (dir != null && dir.matches("t\\d+")) {
+            return dir;   // ya es un temporal, no hace falta cargar de nuevo
+        }
+        String tmp = newTemp();
+        emit(tmp + " = " + dir);
+        return tmp;
     }
 
     // Agrega una instruccion al codigo intermedio
@@ -890,7 +912,7 @@ public class Parser extends java_cup.runtime.lr_parser {
     static class ExprInfo {
         final String  type;
         final Integer constValue;
-        final String  dir;
+        final String  dir;          // SIEMPRE un temporal (t\d+) cuando proviene de una operacion
 
         ExprInfo(String type) {
             this.type       = type;
@@ -975,6 +997,19 @@ public class Parser extends java_cup.runtime.lr_parser {
     private int paramCounter = 0;
 
     // ==============================================================
+    //  VALIDACION DE RETURN EN FUNCIONES
+    // ==============================================================
+
+    // Indica si la funcion que se esta analizando actualmente
+    // contiene al menos un 'return'. Se inicializa en false al entrar
+    // a cada funcion y se activa en true al procesar cualquier return_stmt.
+    // El main no requiere return, por lo que no se valida para el.
+    private boolean currentFuncHasReturn = false;
+
+    // Nombre de la funcion para el mensaje de error (se guarda al entrar)
+    private String  currentFuncNameForReturn = "";
+
+    // ==============================================================
     //  PILA SEMANTICA DE SCOPES
     // ==============================================================
 
@@ -989,16 +1024,15 @@ public class Parser extends java_cup.runtime.lr_parser {
         }
     }
 
-    // Pila de bloques activos. Cada bloque tiene sus propias variables.
-    // Al entrar a una funcion o if se agrega un nivel, al salir se quita.
+    // Pila de bloques activos.
     private Deque<Map<String, VarInfo>> semanticStack  = new ArrayDeque<>();
-    
+
     // Nombres de los bloques activos
     private Deque<String>               scopeNames     = new ArrayDeque<>();
-    
+
     // Tipo que debe devolver la funcion actual (null si es main)
     private String                      currentReturnType = null;
-    
+
     // Guarda el tipo de la expresion de cada switch abierto
     private Deque<String>               switchExprTypes   = new ArrayDeque<>();
 
@@ -1017,7 +1051,6 @@ public class Parser extends java_cup.runtime.lr_parser {
     }
 
     // Registra una variable en el bloque actual.
-    // Si ya existe en ese mismo bloque, lanza error de duplicado.
     private void declareSymbol(String name, String type, boolean initialized, int line, int col) {
         if (semanticStack.isEmpty()) {
             semantic_error(line, col, "Declaracion fuera de funcion: '" + name + "'");
@@ -1048,8 +1081,7 @@ public class Parser extends java_cup.runtime.lr_parser {
         }
     }
 
-    // Busca el tipo de una variable en la pila sin verificar nada mas.
-    // Devuelve null si no la encuentra.
+    // Busca el tipo de una variable en la pila.
     private String lookupSymbol(String name) {
         for (Map<String, VarInfo> scope : semanticStack) {
             VarInfo vi = scope.get(name);
@@ -1058,9 +1090,7 @@ public class Parser extends java_cup.runtime.lr_parser {
         return null;
     }
 
-    // Busca la variable y ademas verifica que exista y tenga valor.
-    // Si no existe: error "no declarada".
-    // Si existe pero no tiene valor: error "sin inicializar".
+    // Busca la variable y verifica que exista y tenga valor.
     private String lookupAndCheckInit(String name, int line, int col) {
         for (Map<String, VarInfo> scope : semanticStack) {
             VarInfo vi = scope.get(name);
@@ -1097,60 +1127,65 @@ public class Parser extends java_cup.runtime.lr_parser {
         return bracket >= 0 ? type.substring(0, bracket) : type;
     }
 
-    // Verifica si un valor de un tipo puede asignarse a una variable de otro.
-    // int -> float se acepta. Todo lo demas debe ser exactamente igual.
+    /**
+     * Solo se permiten operaciones entre expresiones del MISMO tipo.
+     * int con int, float con float, bool con bool, etc.
+     * int->float ya NO se acepta en operaciones (solo en asignacion si se desea).
+     */
+    private boolean isSameType(String t1, String t2) {
+        if (t1 == null || t2 == null)             return false;
+        if ("error".equals(t1) || "error".equals(t2)) return true;  // no propagar mas errores
+        return t1.equals(t2);
+    }
+
+    /**
+     * Para asignaciones se mantiene compatibilidad int->float pero
+     * el parser ya restringe las operaciones a tipos iguales
+     */
     private boolean isCompatible(String exprType, String varType) {
         if (exprType == null || varType == null) return false;
         if ("error".equals(exprType) || "error".equals(varType)) return true;
         if (exprType.equals(varType)) return true;
+        // Permitir int -> float solo en asignacion/inicializacion (no en operaciones)
         if ("int".equals(exprType) && "float".equals(varType)) return true;
         return false;
     }
 
-    // Calcula el tipo del resultado de una operacion aritmetica.
-    // Si alguno es float el resultado es float; si ambos son int es int.
+    /**
+     * El tipo del resultado de una operacion es el tipo comun SOLO
+     * cuando los dos tipos son identicos.
+     */
     private String resultType(String t1, String t2) {
         if (t1 == null || t2 == null)             return "error";
         if ("error".equals(t1) || "error".equals(t2)) return "error";
-        if ("float".equals(t1) || "float".equals(t2)) return "float";
-        if ("int".equals(t1)   && "int".equals(t2))   return "int";
-        return "error";
+        if (t1.equals(t2))                        return t1;
+        return "error";   // tipos distintos => error
     }
 
     // Verifica si dos tipos se pueden comparar con equal o n_equal.
-    // Acepta mezclas de int y float, y pares del mismo tipo.
+    // solo se permite el mismo tipo.
     private boolean isEqualityCompatible(String t1, String t2) {
         if (t1 == null || t2 == null) return false;
         if ("error".equals(t1) || "error".equals(t2)) return true;
-        if (t1.equals(t2)) return true;
-        if (isNumeric(t1) && isNumeric(t2)) return true;
-        return false;
+        return t1.equals(t2);
     }
 
     // ==============================================================
     //  ACUMULADOR DE ARGUMENTOS PARA LLAMADAS
     // ==============================================================
 
-    // Guarda el tipo y la direccion de un argumento de una llamada
     private static class ArgInfo {
         final String type;
         final String dir;
         ArgInfo(String type, String dir) { this.type = type; this.dir = dir; }
     }
 
-    // Pila de listas de argumentos. Se usa una pila para soportar
-    // llamadas anidadas como f( g(1, 2), 3 ) sin mezclar argumentos.
     private Deque<List<ArgInfo>> argStack = new ArrayDeque<>();
 
-    // Inicia la recoleccion de argumentos para una nueva llamada
     private void beginArgList()                   { argStack.push(new ArrayList<>()); }
-    
-    // Agrega un argumento a la llamada actual
     private void addArg(String type, String dir)  {
         if (!argStack.isEmpty()) argStack.peek().add(new ArgInfo(type, dir));
     }
-
-    // Termina la recoleccion y devuelve la lista de argumentos
     private List<ArgInfo> endArgList() {
         return argStack.isEmpty() ? Collections.emptyList() : argStack.pop();
     }
@@ -1328,11 +1363,11 @@ class CUP$Parser$actions {
               Object RESULT =null;
 
         currentFunc       = "main";
-        currentReturnType = null;   // main no devuelve nada
+        currentReturnType = null;
         paramCounter      = 0;
         Lexer.pushScope("main");
         enterScope("main");
-        emit("main:");  // etiqueta de entrada en el codigo intermedio
+        emit("main:");
     
               CUP$Parser$result = parser.getSymbolFactory().newSymbol("NT$0",44, ((java_cup.runtime.Symbol)CUP$Parser$stack.peek()), RESULT);
             }
@@ -1378,9 +1413,11 @@ class CUP$Parser$actions {
 		int idright = ((java_cup.runtime.Symbol)CUP$Parser$stack.peek()).right;
 		String id = (String)((java_cup.runtime.Symbol) CUP$Parser$stack.peek()).value;
 		
-        currentFunc       = id;
-        currentReturnType = tr;
-        paramCounter      = 0;
+        currentFunc              = id;
+        currentReturnType        = tr;
+        paramCounter             = 0;
+        currentFuncHasReturn     = false;   // reiniciar bandera de return (VALIDACION RETURN)
+        currentFuncNameForReturn = id;      // guardar nombre para el mensaje de error
         Lexer.resetControlCounters();
         Lexer.pushScope(currentFunc);
         enterScope(currentFunc);
@@ -1391,7 +1428,7 @@ class CUP$Parser$actions {
             currentFuncInfo = new FunctionInfo(tr);
             functionTable.put(id, currentFuncInfo);
         }
-        emit(id + ":");   // etiqueta de entrada a la funcion
+        emit(id + ":");
     
               CUP$Parser$result = parser.getSymbolFactory().newSymbol("func_stmt_cond",41, ((java_cup.runtime.Symbol)CUP$Parser$stack.elementAt(CUP$Parser$top-2)), ((java_cup.runtime.Symbol)CUP$Parser$stack.peek()), RESULT);
             }
@@ -1401,7 +1438,14 @@ class CUP$Parser$actions {
           case 11: // funcion ::= func_stmt_cond LPAR param_lista RPAR bloque close_scope 
             {
               Object RESULT =null;
-
+		
+        // VALIDACION RETURN: toda funcion (excepto main) debe tener al menos un return
+        if (!currentFuncHasReturn) {
+            semantic_error(0, 0,
+                "Funcion '" + currentFuncNameForReturn + "' no contiene ninguna sentencia 'return' " +
+                "(se esperaba un return de tipo " + currentReturnType + ")");
+        }
+    
               CUP$Parser$result = parser.getSymbolFactory().newSymbol("funcion",2, ((java_cup.runtime.Symbol)CUP$Parser$stack.elementAt(CUP$Parser$top-5)), ((java_cup.runtime.Symbol)CUP$Parser$stack.peek()), RESULT);
             }
           return CUP$Parser$result;
@@ -1410,7 +1454,10 @@ class CUP$Parser$actions {
           case 12: // funcion ::= func_stmt_cond LPAR param_lista RPAR error close_scope 
             {
               Object RESULT =null;
-
+		
+        // En caso de error sintactico tambien reseteamos la bandera
+        currentFuncHasReturn = false;
+    
               CUP$Parser$result = parser.getSymbolFactory().newSymbol("funcion",2, ((java_cup.runtime.Symbol)CUP$Parser$stack.elementAt(CUP$Parser$top-5)), ((java_cup.runtime.Symbol)CUP$Parser$stack.peek()), RESULT);
             }
           return CUP$Parser$result;
@@ -1649,8 +1696,10 @@ class CUP$Parser$actions {
             {
               Object RESULT =null;
 		
-        // Si hay un switch activo, saltamos a su etiqueta de fin
+        // CORRECCIÓN: marcar que hubo break Y emitir el goto al end del switch.
+        // La bandera currentCaseHadBreak evita que case_item emita un segundo goto.
         if (!switchLabelStack.isEmpty()) {
+            currentCaseHadBreak = true;
             emit("goto " + switchLabelStack.peek() + "_end");
         }
     
@@ -1687,8 +1736,11 @@ class CUP$Parser$actions {
 		int idright = ((java_cup.runtime.Symbol)CUP$Parser$stack.peek()).right;
 		String id = (String)((java_cup.runtime.Symbol) CUP$Parser$stack.peek()).value;
 		
+        // emitir "var_N_tipo nombre"
+        varDeclCount++;
         Lexer.addSymbol(id, t, "No", idleft, idright);
         declareSymbol(id, t, false, idleft, idright);
+        emit("var_" + varDeclCount + "_" + t + " " + id);
     
               CUP$Parser$result = parser.getSymbolFactory().newSymbol("decl",9, ((java_cup.runtime.Symbol)CUP$Parser$stack.elementAt(CUP$Parser$top-2)), ((java_cup.runtime.Symbol)CUP$Parser$stack.peek()), RESULT);
             }
@@ -1708,14 +1760,21 @@ class CUP$Parser$actions {
 		int eright = ((java_cup.runtime.Symbol)CUP$Parser$stack.peek()).right;
 		ExprInfo e = (ExprInfo)((java_cup.runtime.Symbol) CUP$Parser$stack.peek()).value;
 		
-        Lexer.addSymbol(id, t, "No", idleft, idright);
-        declareSymbol(id, t, true, idleft, idright);
+        // Verificar tipos (asignacion permite int->float pero nada mas)
         if (!isCompatible(e.type, t)) {
             semantic_error(idleft, idright,
                 "Inicializacion de '" + id + "': se esperaba " + t +
                 " pero se obtuvo " + e.type);
         }
-        emit(id + " = " + e.dir);   // asignacion inicial en codigo intermedio
+        // declaracion
+        varDeclCount++;
+        Lexer.addSymbol(id, t, "No", idleft, idright);
+        declareSymbol(id, t, true, idleft, idright);
+        emit("var_" + varDeclCount + "_" + t + " " + id);
+
+        // asegurar que el valor ya esta en un temporal y asignarlo
+        String srcDir = loadToTemp(e.dir);
+        emit(id + " = " + srcDir);
     
               CUP$Parser$result = parser.getSymbolFactory().newSymbol("decl",9, ((java_cup.runtime.Symbol)CUP$Parser$stack.elementAt(CUP$Parser$top-4)), ((java_cup.runtime.Symbol)CUP$Parser$stack.peek()), RESULT);
             }
@@ -1739,9 +1798,12 @@ class CUP$Parser$actions {
 		Integer b = (Integer)((java_cup.runtime.Symbol) CUP$Parser$stack.elementAt(CUP$Parser$top-1)).value;
 		
         String arrType = t + "[" + a + "][" + b + "]";
+        // declaracion de arreglo
+        varDeclCount++;
         Lexer.addSymbol(id, arrType, "No", idleft, idright);
         declareSymbol(id, arrType, true, idleft, idright);
         registerArrayDimensions(id, a.intValue(), b.intValue());
+        emit("var_" + varDeclCount + "_" + arrType + " " + id);
     
               CUP$Parser$result = parser.getSymbolFactory().newSymbol("decl",9, ((java_cup.runtime.Symbol)CUP$Parser$stack.elementAt(CUP$Parser$top-8)), ((java_cup.runtime.Symbol)CUP$Parser$stack.peek()), RESULT);
             }
@@ -1765,9 +1827,12 @@ class CUP$Parser$actions {
 		Integer b = (Integer)((java_cup.runtime.Symbol) CUP$Parser$stack.elementAt(CUP$Parser$top-5)).value;
 		
         String arrType = t + "[" + a + "][" + b + "]";
+        // declaracion de arreglo
+        varDeclCount++;
         Lexer.addSymbol(id, arrType, "No", idleft, idright);
         declareSymbol(id, arrType, true, idleft, idright);
         registerArrayDimensions(id, a.intValue(), b.intValue());
+        emit("var_" + varDeclCount + "_" + arrType + " " + id);
     
               CUP$Parser$result = parser.getSymbolFactory().newSymbol("decl",9, ((java_cup.runtime.Symbol)CUP$Parser$stack.elementAt(CUP$Parser$top-12)), ((java_cup.runtime.Symbol)CUP$Parser$stack.peek()), RESULT);
             }
@@ -1834,7 +1899,9 @@ class CUP$Parser$actions {
         } else {
             markInitialized(id);
         }
-        emit(id + " = " + e.dir);
+        // el valor debe estar en un temporal antes de asignarse
+        String srcDir = loadToTemp(e.dir);
+        emit(id + " = " + srcDir);
     
               CUP$Parser$result = parser.getSymbolFactory().newSymbol("asig",10, ((java_cup.runtime.Symbol)CUP$Parser$stack.elementAt(CUP$Parser$top-2)), ((java_cup.runtime.Symbol)CUP$Parser$stack.peek()), RESULT);
             }
@@ -1856,7 +1923,9 @@ class CUP$Parser$actions {
                 "Asignacion a elemento de arreglo: se esperaba " + a.type +
                 " pero se obtuvo " + e.type);
         }
-        emit(a.dir + " = " + e.dir);
+        // el valor debe estar en un temporal
+        String srcDir = loadToTemp(e.dir);
+        emit(a.dir + " = " + srcDir);
     
               CUP$Parser$result = parser.getSymbolFactory().newSymbol("asig",10, ((java_cup.runtime.Symbol)CUP$Parser$stack.elementAt(CUP$Parser$top-2)), ((java_cup.runtime.Symbol)CUP$Parser$stack.peek()), RESULT);
             }
@@ -1893,11 +1962,8 @@ class CUP$Parser$actions {
             semantic_error(idleft, idright, "'" + id + "' no es un arreglo");
             result = ExprInfo.error();
         } else {
-            result = new ExprInfo(baseType(arrType));
-
             int[] dims = getArrayDimensions(id);
             if (dims != null) {
-                // Verificar limites solo si los indices son constantes conocidas
                 if ("int".equals(i1.type) && i1.constValue != null)
                     checkIndexBound(id, "fila",    i1.constValue, dims[0], idleft, idright);
                 if ("int".equals(i2.type) && i2.constValue != null)
@@ -1905,18 +1971,25 @@ class CUP$Parser$actions {
             }
 
             int cols = (dims != null) ? dims[1] : -1;
+
+            // cargar indices a temporales antes de operar
+            String tI1 = loadToTemp(i1.dir);
+            String tI2 = loadToTemp(i2.dir);
+
             String offsetDir;
             if (i1.constValue != null && i2.constValue != null && cols > 0) {
-                // Caso simple: indices constantes -> calculamos el offset directo
+                // indices constantes -> calcular offset y cargarlo a un temporal
                 int offset = i1.constValue * cols + i2.constValue;
-                offsetDir  = String.valueOf(offset);
+                offsetDir  = newTemp();
+                emit(offsetDir + " = " + offset);
             } else {
-                // indices variables -> necesitamos temporales
-                String tCols  = (cols > 0) ? String.valueOf(cols) : "cols_" + id;
-                String tMul   = newTemp();
-                String tOff   = newTemp();
-                emit(tMul + " = " + i1.dir + " * " + tCols);
-                emit(tOff + " = " + tMul  + " + " + i2.dir);
+                // multiplicacion y suma solo con temporales
+                String tCols = newTemp();
+                emit(tCols + " = " + (cols > 0 ? cols : "cols_" + id));
+                String tMul  = newTemp();
+                emit(tMul + " = " + tI1 + " * " + tCols);
+                String tOff  = newTemp();
+                emit(tOff + " = " + tMul + " + " + tI2);
                 offsetDir = tOff;
             }
 
@@ -1964,24 +2037,34 @@ class CUP$Parser$actions {
                     checkIndexBound(id, "columna", i2.constValue, dims[1], idleft, idright);
             }
         } else if (arrType == null) {
-            // error ya fue emitido por lookupAndCheckInit
+            // error ya fue emitido
         } else {
             semantic_error(idleft, idright, "'" + id + "' no es un arreglo");
         }
+
         int[] dims = (arrType != null) ? getArrayDimensions(id) : null;
         int cols = (dims != null) ? dims[1] : -1;
+
+        // cargar indices a temporales
+        String tI1 = loadToTemp(i1.dir);
+        String tI2 = loadToTemp(i2.dir);
+
         String offsetDir;
         if (i1.constValue != null && i2.constValue != null && cols > 0) {
             int offset = i1.constValue * cols + i2.constValue;
-            offsetDir  = String.valueOf(offset);
+            offsetDir  = newTemp();
+            emit(offsetDir + " = " + offset);
         } else {
-            String tCols = (cols > 0) ? String.valueOf(cols) : "cols_" + id;
+            // solo temporales en operaciones
+            String tCols = newTemp();
+            emit(tCols + " = " + (cols > 0 ? cols : "cols_" + id));
             String tMul  = newTemp();
+            emit(tMul + " = " + tI1 + " * " + tCols);
             String tOff  = newTemp();
-            emit(tMul + " = " + i1.dir + " * " + tCols);
-            emit(tOff + " = " + tMul  + " + " + i2.dir);
+            emit(tOff + " = " + tMul + " + " + tI2);
             offsetDir = tOff;
         }
+
         String btype = (arrType != null && isArrayType(arrType)) ? baseType(arrType) : "error";
         RESULT = new ExprInfo(btype, null, id + "[" + offsetDir + "]");
     
@@ -2024,22 +2107,21 @@ class CUP$Parser$actions {
 		int condright = ((java_cup.runtime.Symbol)CUP$Parser$stack.elementAt(CUP$Parser$top-1)).right;
 		ExprInfo cond = (ExprInfo)((java_cup.runtime.Symbol) CUP$Parser$stack.elementAt(CUP$Parser$top-1)).value;
 		
-        // La condicion DEBE ser bool; si no, error semantico
         if (!"bool".equals(cond.type) && !"error".equals(cond.type)) {
             semantic_error(condleft, condright,
                 "Condicion del 'if' debe ser bool, se obtuvo " + cond.type);
         }
         Lexer.pushIfScope(currentFunc);
         enterScope("if" + Lexer.ifCount);
-
-        // Guardar el numero de este if para cerrar bien las etiquetas
         ifCountStack.push(Lexer.ifCount);
 
-        String lIf    = currentFunc + "_if"    + Lexer.ifCount;
-        String lElse  = currentFunc + "_else"  + Lexer.ifCount;
+        // la condicion debe estar en un temporal
+        String condDir = loadToTemp(cond.dir);
+        String lIf    = currentFunc + "_if"   + Lexer.ifCount;
+        String lElse  = currentFunc + "_else" + Lexer.ifCount;
 
-        emit("ifFalse " + cond.dir + " goto " + lElse);   // salto condicional
-        emit(lIf + ":");                                    // etiqueta del then
+        emit("ifFalse " + condDir + " goto " + lElse);
+        emit(lIf + ":");
     
               CUP$Parser$result = parser.getSymbolFactory().newSymbol("if_stmt_cond",35, ((java_cup.runtime.Symbol)CUP$Parser$stack.elementAt(CUP$Parser$top-4)), ((java_cup.runtime.Symbol)CUP$Parser$stack.peek()), RESULT);
             }
@@ -2058,8 +2140,8 @@ class CUP$Parser$actions {
         String lEndif = currentFunc + "_endif" + ifN;
         String lElse  = currentFunc + "_else"  + ifN;
 
-        emit("goto " + lEndif);   // al terminar el then, saltar al endif
-        emit(lElse + ":");        // etiqueta del else
+        emit("goto " + lEndif);
+        emit(lElse + ":");
     
               CUP$Parser$result = parser.getSymbolFactory().newSymbol("else_stmt_cond",36, ((java_cup.runtime.Symbol)CUP$Parser$stack.elementAt(CUP$Parser$top-1)), ((java_cup.runtime.Symbol)CUP$Parser$stack.peek()), RESULT);
             }
@@ -2073,7 +2155,6 @@ class CUP$Parser$actions {
         int ifN = ifCountStack.isEmpty() ? Lexer.ifCount : ifCountStack.pop();
         String lElse  = currentFunc + "_else"  + ifN;
         String lEndif = currentFunc + "_endif" + ifN;
-        // Sin else, la etiqueta del else y el endif son la misma
         emit(lElse + ":");
         emit(lEndif + ":");
     
@@ -2089,7 +2170,7 @@ class CUP$Parser$actions {
         int ifN = ifCountStack.isEmpty() ? Lexer.ifCount : ifCountStack.pop();
         if (!elseCountStack.isEmpty()) elseCountStack.pop();
         String lEndif = currentFunc + "_endif" + ifN;
-        emit(lEndif + ":");   // etiqueta del final del if-else
+        emit(lEndif + ":");
     
               CUP$Parser$result = parser.getSymbolFactory().newSymbol("if_stmt",14, ((java_cup.runtime.Symbol)CUP$Parser$stack.elementAt(CUP$Parser$top-5)), ((java_cup.runtime.Symbol)CUP$Parser$stack.peek()), RESULT);
             }
@@ -2120,10 +2201,7 @@ class CUP$Parser$actions {
 		
         Lexer.pushDoScope(currentFunc);
         enterScope("do" + Lexer.doCount);
-
         doCountStack.push(Lexer.doCount);
-
-        // Emitir etiqueta de inicio del do
         String lStart = currentFunc + "_do" + Lexer.doCount;
         emit(lStart + ":");
     
@@ -2139,7 +2217,6 @@ class CUP$Parser$actions {
 		int condright = ((java_cup.runtime.Symbol)CUP$Parser$stack.elementAt(CUP$Parser$top-2)).right;
 		ExprInfo cond = (ExprInfo)((java_cup.runtime.Symbol) CUP$Parser$stack.elementAt(CUP$Parser$top-2)).value;
 		
-        // La condicion DEBE ser bool
         if (!"bool".equals(cond.type) && !"error".equals(cond.type)) {
             semantic_error(condleft, condright,
                 "Condicion del 'while' debe ser bool, se obtuvo " + cond.type);
@@ -2148,8 +2225,10 @@ class CUP$Parser$actions {
         String lStart = currentFunc + "_do" + doN;
         String lEnd   = currentFunc + "_do" + doN + "_end";
 
-        emit("if " + cond.dir + " goto " + lStart);   // si es verdad, repetir
-        emit(lEnd + ":");                               // etiqueta de salida del ciclo
+        // la condicion debe estar en un temporal
+        String condDir = loadToTemp(cond.dir);
+        emit("if " + condDir + " goto " + lStart);
+        emit(lEnd + ":");
     
               CUP$Parser$result = parser.getSymbolFactory().newSymbol("do_while",15, ((java_cup.runtime.Symbol)CUP$Parser$stack.elementAt(CUP$Parser$top-8)), ((java_cup.runtime.Symbol)CUP$Parser$stack.peek()), RESULT);
             }
@@ -2174,21 +2253,17 @@ class CUP$Parser$actions {
 		int eright = ((java_cup.runtime.Symbol)CUP$Parser$stack.elementAt(CUP$Parser$top-1)).right;
 		ExprInfo e = (ExprInfo)((java_cup.runtime.Symbol) CUP$Parser$stack.elementAt(CUP$Parser$top-1)).value;
 		
-        // La expresion del switch debe ser int o char
         if (!"int".equals(e.type) && !"char".equals(e.type) && !"error".equals(e.type)) {
             semantic_error(eleft, eright,
                 "Expresion del 'switch' debe ser int o char, se obtuvo " + e.type);
         }
         switchExprTypePile.push(e.type);
-
         Lexer.pushSwitchScope(currentFunc);
         enterScope("switch" + Lexer.switchCount);
 
-        // Crear una nueva bandera de control para este switch
         switchFlagCounter++;
         String flagName = "tsw" + switchFlagCounter;
 
-        // Calcular la etiqueta base del switch
         int doN = doCountStack.isEmpty() ? Lexer.doCount : doCountStack.peek();
         String swLabel;
         if (doN > 0) {
@@ -2199,18 +2274,20 @@ class CUP$Parser$actions {
 
         switchLabelStack.push(swLabel);
         switchFlagStack.push(flagName);
-        switchDirStack.push(e.dir);
 
-        // Guardar la expresion en un temporal para que los cases lo usen
-        String tSwitch = newTemp();
-        emit(tSwitch + " = " + e.dir);
-        emit(flagName + " = 1");         // encender la bandera
-        String tRef = newTemp();
-        emit(tRef + " = " + tSwitch);
+        // CORRECCIÓN 1: cargar el selector UNA SOLA VEZ, sin copia redundante.
+        // loadToTemp emite "tN = e.dir" solo si e.dir no es ya un temporal.
+        String tSelector = loadToTemp(e.dir);
+        switchDirStack.push(tSelector);
 
-        // Actualizamos la pila para que los cases usen tRef
-        switchDirStack.pop();
-        switchDirStack.push(tRef);
+        // Inicializar el flag de control a 1 mediante un temporal
+        String tOne = newTemp();
+        emit(tOne + " = 1");
+        emit(flagName + " = " + tOne);
+
+        // CORRECCIÓN 2: emitir el salto al primer case AQUI, con swLabel ya definido.
+        // Esto reemplaza el "if (caseN==1) emit(goto)" que estaba en case_stmt_cond.
+        emit("goto " + swLabel + "_case1");
     
               CUP$Parser$result = parser.getSymbolFactory().newSymbol("switch_stmt_cond",38, ((java_cup.runtime.Symbol)CUP$Parser$stack.elementAt(CUP$Parser$top-4)), ((java_cup.runtime.Symbol)CUP$Parser$stack.peek()), RESULT);
             }
@@ -2223,11 +2300,9 @@ class CUP$Parser$actions {
 		
         if (!switchExprTypePile.isEmpty()) switchExprTypePile.pop();
         if (!switchDirStack.isEmpty())     switchDirStack.pop();
-
-        String swLabel  = switchLabelStack.isEmpty() ? "_sw" : switchLabelStack.pop();
+        String swLabel = switchLabelStack.isEmpty() ? "_sw" : switchLabelStack.pop();
         if (!switchFlagStack.isEmpty()) switchFlagStack.pop();
-
-        emit(swLabel + "_end:");   // etiqueta de fin del switch (adonde van los break)
+        emit(swLabel + "_end:");
     
               CUP$Parser$result = parser.getSymbolFactory().newSymbol("switch_stmt",16, ((java_cup.runtime.Symbol)CUP$Parser$stack.elementAt(CUP$Parser$top-4)), ((java_cup.runtime.Symbol)CUP$Parser$stack.peek()), RESULT);
             }
@@ -2277,7 +2352,6 @@ class CUP$Parser$actions {
 		int litright = ((java_cup.runtime.Symbol)CUP$Parser$stack.elementAt(CUP$Parser$top-1)).right;
 		ExprInfo lit = (ExprInfo)((java_cup.runtime.Symbol) CUP$Parser$stack.elementAt(CUP$Parser$top-1)).value;
 		
-        // Verificar compatibilidad de tipo con la expresion del switch
         String switchType = switchExprTypePile.isEmpty() ? null : switchExprTypePile.peek();
         if (switchType != null
                 && !isCompatible(lit.type, switchType)
@@ -2301,35 +2375,37 @@ class CUP$Parser$actions {
         caseLabelStack.push(caseLabel);
         caseNumStack.push(caseN);
 
-        // El primer case recibe el goto desde el encabezado del switch
-        if (caseN == 1) {
-            emit("goto " + caseLabel);
-        }
+        // Resetear la bandera de break para este case nuevo
+        currentCaseHadBreak = false;
 
+        // Etiqueta de entrada al case (destino del goto emitido previamente)
         emit("");
         emit(caseLabel + ":");
 
-        // Verificar bandera
-        String t2 = newTemp();
-        String t3 = newTemp();
-        emit(t2 + " = " + flagName);
-        emit(t3 + " = " + t2 + " == 0");
-        emit("if " + t3 + " goto " + caseEnd);
+        // ── Verificar flag: si flag == 0 → el case anterior ya ejecuto,
+        //    entrar directamente al cuerpo (fall-through activado).
+        String tFlag = newTemp();
+        emit(tFlag + " = " + flagName);
+        String tZero = newTemp();
+        emit(tZero + " = 0");
+        String tFlagCmp = newTemp();
+        emit(tFlagCmp + " = " + tFlag + " == " + tZero);
+        emit("if " + tFlagCmp + " goto " + caseBody);
 
-        // Comparar con el valor del case
-        String t4 = newTemp();
-        String t5 = newTemp();
-        emit(t4 + " = " + lit.dir);
-        emit(t5 + " = " + swDir + " == " + t4);
-        emit("if " + t5 + " goto " + caseBody);
+        // ── Comparar el selector con el literal de este case 
+        String tLit = loadToTemp(lit.dir);
+        String tSel = loadToTemp(swDir);
+        String tCmp = newTemp();
+        emit(tCmp + " = " + tSel + " == " + tLit);
+        emit("if " + tCmp + " goto " + caseBody);
         emit("goto " + caseEnd);
 
+        // ── Cuerpo del case: apagar el flag
         emit("");
         emit(caseBody + ":");
-        // Apagar la bandera (para que los cases siguientes no se ejecuten)
-        String t6 = newTemp();
-        emit(t6 + " = 0");
-        emit(flagName + " = " + t6);
+        String tOff = newTemp();
+        emit(tOff + " = 0");
+        emit(flagName + " = " + tOff);
     
               CUP$Parser$result = parser.getSymbolFactory().newSymbol("case_stmt_cond",37, ((java_cup.runtime.Symbol)CUP$Parser$stack.elementAt(CUP$Parser$top-3)), ((java_cup.runtime.Symbol)CUP$Parser$stack.peek()), RESULT);
             }
@@ -2345,11 +2421,22 @@ class CUP$Parser$actions {
         String caseLabel = caseLabelStack.isEmpty()   ? swLabel + "_case" + caseN : caseLabelStack.pop();
         String caseEnd   = caseLabel + "_end";
 
-        emit("goto " + caseEnd);
+        // CORRECCIÓN 4: emitir goto caseEnd solo cuando NO hubo break.
+        // Si hubo break, ya esta emitido "goto switch_end" y agregar otro
+        // goto aqui generaria codigo muerto o doble goto.
+        if (!currentCaseHadBreak) {
+            emit("goto " + caseEnd);
+        }
+
+        // caseEnd es alcanzado por el flujo que no entro al cuerpo del case
         emit("");
         emit(caseEnd + ":");
-        // Saltar al siguiente case (o al default, que se corregira despues)
+
+        // Encadenar al siguiente case (o al default; default_case lo parcheara)
         emit("goto " + swLabel + "_case" + (caseN + 1));
+
+        // Preparar la bandera para el siguiente case
+        currentCaseHadBreak = false;
     
               CUP$Parser$result = parser.getSymbolFactory().newSymbol("case_item",18, ((java_cup.runtime.Symbol)CUP$Parser$stack.elementAt(CUP$Parser$top-2)), ((java_cup.runtime.Symbol)CUP$Parser$stack.peek()), RESULT);
             }
@@ -2379,7 +2466,8 @@ class CUP$Parser$actions {
         String defaultBody  = defaultLabel + "_b";
         String defaultEnd   = defaultLabel + "_end";
 
-        // Corregir el goto del ultimo case_item para que vaya al default
+        // Parchar el ultimo "goto swLabel_caseN" del ultimo case_item
+        // para que apunte al default.
         if (!code.isEmpty()) {
             for (int i = code.size() - 1; i >= 0; i--) {
                 String line = code.get(i);
@@ -2393,19 +2481,22 @@ class CUP$Parser$actions {
         emit("");
         emit(defaultLabel + ":");
 
-        // Verificar bandera (igual que en los cases)
-        String t2 = newTemp();
-        String t3 = newTemp();
-        emit(t2 + " = " + flagName);
-        emit(t3 + " = " + t2 + " == 0");
-        emit("if " + t3 + " goto " + defaultEnd);
+        // Verificar flag: si flag == 0 → fall-through desde el case anterior,
+        // saltar directamente al cuerpo del default.
+        String tFlag = newTemp();
+        emit(tFlag + " = " + flagName);
+        String tZero = newTemp();
+        emit(tZero + " = 0");
+        String tCheck = newTemp();
+        emit(tCheck + " = " + tFlag + " == " + tZero);
+        emit("if " + tCheck + " goto " + defaultEnd);
         emit("goto " + defaultBody);
 
         emit("");
         emit(defaultBody + ":");
-        String t6 = newTemp();
-        emit(t6 + " = 0");
-        emit(flagName + " = " + t6);
+        String tOff = newTemp();
+        emit(tOff + " = 0");
+        emit(flagName + " = " + tOff);
     
               CUP$Parser$result = parser.getSymbolFactory().newSymbol("NT$1",45, ((java_cup.runtime.Symbol)CUP$Parser$stack.peek()), RESULT);
             }
@@ -2447,7 +2538,11 @@ class CUP$Parser$actions {
                 "Return: se esperaba " + currentReturnType +
                 " pero se obtuvo " + e.type);
         }
-        emit("return " + e.dir);
+        // VALIDACION RETURN: marcar que esta funcion si tiene un return
+        currentFuncHasReturn = true;
+        // el valor de retorno debe estar en un temporal
+        String retDir = loadToTemp(e.dir);
+        emit("return " + retDir);
     
               CUP$Parser$result = parser.getSymbolFactory().newSymbol("return_stmt",21, ((java_cup.runtime.Symbol)CUP$Parser$stack.elementAt(CUP$Parser$top-2)), ((java_cup.runtime.Symbol)CUP$Parser$stack.peek()), RESULT);
             }
@@ -2485,7 +2580,9 @@ class CUP$Parser$actions {
 		int eright = ((java_cup.runtime.Symbol)CUP$Parser$stack.elementAt(CUP$Parser$top-1)).right;
 		ExprInfo e = (ExprInfo)((java_cup.runtime.Symbol) CUP$Parser$stack.elementAt(CUP$Parser$top-1)).value;
 		
-        emit("write," + e.type + "," + e.dir);
+        // el valor debe estar en un temporal antes de la escritura
+        String printDir = loadToTemp(e.dir);
+        emit("write," + e.type + "," + printDir);
     
               CUP$Parser$result = parser.getSymbolFactory().newSymbol("io_stmt",22, ((java_cup.runtime.Symbol)CUP$Parser$stack.elementAt(CUP$Parser$top-4)), ((java_cup.runtime.Symbol)CUP$Parser$stack.peek()), RESULT);
             }
@@ -2520,8 +2617,15 @@ class CUP$Parser$actions {
         if (!"bool".equals(e2.type) && !"error".equals(e2.type))
             semantic_error(e2left, e2right,
                 "Operando derecho de '@' debe ser bool, se obtuvo " + e2.type);
-        String t = newTemp();
-        emit(t + " = " + e1.dir + " && " + e2.dir);
+        // verificar que son el mismo tipo
+        if (!isSameType(e1.type, e2.type) && !"error".equals(e1.type) && !"error".equals(e2.type))
+            semantic_error(e1left, e1right,
+                "'@' (AND): los operandos deben ser del mismo tipo, se obtuvo " + e1.type + " y " + e2.type);
+        // cargar a temporales
+        String d1 = loadToTemp(e1.dir);
+        String d2 = loadToTemp(e2.dir);
+        String t  = newTemp();
+        emit(t + " = " + d1 + " && " + d2);
         RESULT = new ExprInfo("bool", t);
     
               CUP$Parser$result = parser.getSymbolFactory().newSymbol("expr_log",26, ((java_cup.runtime.Symbol)CUP$Parser$stack.elementAt(CUP$Parser$top-2)), ((java_cup.runtime.Symbol)CUP$Parser$stack.peek()), RESULT);
@@ -2545,8 +2649,13 @@ class CUP$Parser$actions {
         if (!"bool".equals(e2.type) && !"error".equals(e2.type))
             semantic_error(e2left, e2right,
                 "Operando derecho de '#' debe ser bool, se obtuvo " + e2.type);
-        String t = newTemp();
-        emit(t + " = " + e1.dir + " || " + e2.dir);
+        if (!isSameType(e1.type, e2.type) && !"error".equals(e1.type) && !"error".equals(e2.type))
+            semantic_error(e1left, e1right,
+                "'#' (OR): los operandos deben ser del mismo tipo, se obtuvo " + e1.type + " y " + e2.type);
+        String d1 = loadToTemp(e1.dir);
+        String d2 = loadToTemp(e2.dir);
+        String t  = newTemp();
+        emit(t + " = " + d1 + " || " + d2);
         RESULT = new ExprInfo("bool", t);
     
               CUP$Parser$result = parser.getSymbolFactory().newSymbol("expr_log",26, ((java_cup.runtime.Symbol)CUP$Parser$stack.elementAt(CUP$Parser$top-2)), ((java_cup.runtime.Symbol)CUP$Parser$stack.peek()), RESULT);
@@ -2579,8 +2688,10 @@ class CUP$Parser$actions {
         if (!isEqualityCompatible(e1.type, e2.type))
             semantic_error(e1left, e1right,
                 "equal: tipos incomparables " + e1.type + " y " + e2.type);
-        String t = newTemp();
-        emit(t + " = " + e1.dir + " == " + e2.dir);
+        String d1 = loadToTemp(e1.dir);
+        String d2 = loadToTemp(e2.dir);
+        String t  = newTemp();
+        emit(t + " = " + d1 + " == " + d2);
         RESULT = new ExprInfo("bool", t);
     
               CUP$Parser$result = parser.getSymbolFactory().newSymbol("expr_rel",27, ((java_cup.runtime.Symbol)CUP$Parser$stack.elementAt(CUP$Parser$top-5)), ((java_cup.runtime.Symbol)CUP$Parser$stack.peek()), RESULT);
@@ -2601,8 +2712,10 @@ class CUP$Parser$actions {
         if (!isEqualityCompatible(e1.type, e2.type))
             semantic_error(e1left, e1right,
                 "n_equal: tipos incomparables " + e1.type + " y " + e2.type);
-        String t = newTemp();
-        emit(t + " = " + e1.dir + " != " + e2.dir);
+        String d1 = loadToTemp(e1.dir);
+        String d2 = loadToTemp(e2.dir);
+        String t  = newTemp();
+        emit(t + " = " + d1 + " != " + d2);
         RESULT = new ExprInfo("bool", t);
     
               CUP$Parser$result = parser.getSymbolFactory().newSymbol("expr_rel",27, ((java_cup.runtime.Symbol)CUP$Parser$stack.elementAt(CUP$Parser$top-5)), ((java_cup.runtime.Symbol)CUP$Parser$stack.peek()), RESULT);
@@ -2620,14 +2733,21 @@ class CUP$Parser$actions {
 		int e2right = ((java_cup.runtime.Symbol)CUP$Parser$stack.elementAt(CUP$Parser$top-1)).right;
 		ExprInfo e2 = (ExprInfo)((java_cup.runtime.Symbol) CUP$Parser$stack.elementAt(CUP$Parser$top-1)).value;
 		
+        // mismo tipo numerico
+        if (!isSameType(e1.type, e2.type) && !"error".equals(e1.type) && !"error".equals(e2.type)) {
+            semantic_error(e1left, e1right,
+                "less_t: los operandos deben ser del mismo tipo numerico, se obtuvo " + e1.type + " y " + e2.type);
+        }
         if (!isNumeric(e1.type) && !"error".equals(e1.type))
             semantic_error(e1left, e1right,
                 "less_t: se esperaba numerico, se obtuvo " + e1.type);
         if (!isNumeric(e2.type) && !"error".equals(e2.type))
             semantic_error(e2left, e2right,
                 "less_t: se esperaba numerico, se obtuvo " + e2.type);
-        String t = newTemp();
-        emit(t + " = " + e1.dir + " < " + e2.dir);
+        String d1 = loadToTemp(e1.dir);
+        String d2 = loadToTemp(e2.dir);
+        String t  = newTemp();
+        emit(t + " = " + d1 + " < " + d2);
         RESULT = new ExprInfo("bool", t);
     
               CUP$Parser$result = parser.getSymbolFactory().newSymbol("expr_rel",27, ((java_cup.runtime.Symbol)CUP$Parser$stack.elementAt(CUP$Parser$top-5)), ((java_cup.runtime.Symbol)CUP$Parser$stack.peek()), RESULT);
@@ -2645,14 +2765,20 @@ class CUP$Parser$actions {
 		int e2right = ((java_cup.runtime.Symbol)CUP$Parser$stack.elementAt(CUP$Parser$top-1)).right;
 		ExprInfo e2 = (ExprInfo)((java_cup.runtime.Symbol) CUP$Parser$stack.elementAt(CUP$Parser$top-1)).value;
 		
+        if (!isSameType(e1.type, e2.type) && !"error".equals(e1.type) && !"error".equals(e2.type)) {
+            semantic_error(e1left, e1right,
+                "less_te: los operandos deben ser del mismo tipo numerico, se obtuvo " + e1.type + " y " + e2.type);
+        }
         if (!isNumeric(e1.type) && !"error".equals(e1.type))
             semantic_error(e1left, e1right,
                 "less_te: se esperaba numerico, se obtuvo " + e1.type);
         if (!isNumeric(e2.type) && !"error".equals(e2.type))
             semantic_error(e2left, e2right,
                 "less_te: se esperaba numerico, se obtuvo " + e2.type);
-        String t = newTemp();
-        emit(t + " = " + e1.dir + " <= " + e2.dir);
+        String d1 = loadToTemp(e1.dir);
+        String d2 = loadToTemp(e2.dir);
+        String t  = newTemp();
+        emit(t + " = " + d1 + " <= " + d2);
         RESULT = new ExprInfo("bool", t);
     
               CUP$Parser$result = parser.getSymbolFactory().newSymbol("expr_rel",27, ((java_cup.runtime.Symbol)CUP$Parser$stack.elementAt(CUP$Parser$top-5)), ((java_cup.runtime.Symbol)CUP$Parser$stack.peek()), RESULT);
@@ -2670,14 +2796,20 @@ class CUP$Parser$actions {
 		int e2right = ((java_cup.runtime.Symbol)CUP$Parser$stack.elementAt(CUP$Parser$top-1)).right;
 		ExprInfo e2 = (ExprInfo)((java_cup.runtime.Symbol) CUP$Parser$stack.elementAt(CUP$Parser$top-1)).value;
 		
+        if (!isSameType(e1.type, e2.type) && !"error".equals(e1.type) && !"error".equals(e2.type)) {
+            semantic_error(e1left, e1right,
+                "greather_t: los operandos deben ser del mismo tipo numerico, se obtuvo " + e1.type + " y " + e2.type);
+        }
         if (!isNumeric(e1.type) && !"error".equals(e1.type))
             semantic_error(e1left, e1right,
                 "greather_t: se esperaba numerico, se obtuvo " + e1.type);
         if (!isNumeric(e2.type) && !"error".equals(e2.type))
             semantic_error(e2left, e2right,
                 "greather_t: se esperaba numerico, se obtuvo " + e2.type);
-        String t = newTemp();
-        emit(t + " = " + e1.dir + " > " + e2.dir);
+        String d1 = loadToTemp(e1.dir);
+        String d2 = loadToTemp(e2.dir);
+        String t  = newTemp();
+        emit(t + " = " + d1 + " > " + d2);
         RESULT = new ExprInfo("bool", t);
     
               CUP$Parser$result = parser.getSymbolFactory().newSymbol("expr_rel",27, ((java_cup.runtime.Symbol)CUP$Parser$stack.elementAt(CUP$Parser$top-5)), ((java_cup.runtime.Symbol)CUP$Parser$stack.peek()), RESULT);
@@ -2695,14 +2827,20 @@ class CUP$Parser$actions {
 		int e2right = ((java_cup.runtime.Symbol)CUP$Parser$stack.elementAt(CUP$Parser$top-1)).right;
 		ExprInfo e2 = (ExprInfo)((java_cup.runtime.Symbol) CUP$Parser$stack.elementAt(CUP$Parser$top-1)).value;
 		
+        if (!isSameType(e1.type, e2.type) && !"error".equals(e1.type) && !"error".equals(e2.type)) {
+            semantic_error(e1left, e1right,
+                "greather_te: los operandos deben ser del mismo tipo numerico, se obtuvo " + e1.type + " y " + e2.type);
+        }
         if (!isNumeric(e1.type) && !"error".equals(e1.type))
             semantic_error(e1left, e1right,
                 "greather_te: se esperaba numerico, se obtuvo " + e1.type);
         if (!isNumeric(e2.type) && !"error".equals(e2.type))
             semantic_error(e2left, e2right,
                 "greather_te: se esperaba numerico, se obtuvo " + e2.type);
-        String t = newTemp();
-        emit(t + " = " + e1.dir + " >= " + e2.dir);
+        String d1 = loadToTemp(e1.dir);
+        String d2 = loadToTemp(e2.dir);
+        String t  = newTemp();
+        emit(t + " = " + d1 + " >= " + d2);
         RESULT = new ExprInfo("bool", t);
     
               CUP$Parser$result = parser.getSymbolFactory().newSymbol("expr_rel",27, ((java_cup.runtime.Symbol)CUP$Parser$stack.elementAt(CUP$Parser$top-5)), ((java_cup.runtime.Symbol)CUP$Parser$stack.peek()), RESULT);
@@ -2733,17 +2871,29 @@ class CUP$Parser$actions {
 		ExprInfo t = (ExprInfo)((java_cup.runtime.Symbol) CUP$Parser$stack.peek()).value;
 		
         if (isNumeric(e1.type) && isNumeric(t.type)) {
-            String rtype = resultType(e1.type, t.type);
-            // Si ambos son int y conocemos sus valores, calculamos la constante
-            Integer cv = ("int".equals(rtype) && e1.constValue != null && t.constValue != null)
-                         ? e1.constValue + t.constValue : null;
-            String tmp = newTemp();
-            emit(tmp + " = " + e1.dir + " + " + t.dir);
-            RESULT = new ExprInfo(rtype, cv, tmp);
+            // tipos deben ser identicos
+            if (!isSameType(e1.type, t.type)) {
+                semantic_error(e1left, e1right,
+                    "'+': los operandos deben ser del mismo tipo, se obtuvo " +
+                    e1.type + " y " + t.type);
+                RESULT = ExprInfo.error();
+            } else {
+                // cargar operandos a temporales
+                String d1 = loadToTemp(e1.dir);
+                String d2 = loadToTemp(t.dir);
+                // operar solo con temporales -> nuevo temporal
+                Integer cv = ("int".equals(e1.type) && e1.constValue != null && t.constValue != null)
+                             ? e1.constValue + t.constValue : null;
+                String tmp = newTemp();
+                emit(tmp + " = " + d1 + " + " + d2);
+                RESULT = new ExprInfo(e1.type, cv, tmp);
+            }
         } else if ("string".equals(e1.type) && "string".equals(t.type)) {
-            // Concatenacion de strings con +
+            // Concatenacion de strings (mismos tipos)
+            String d1  = loadToTemp(e1.dir);
+            String d2  = loadToTemp(t.dir);
             String tmp = newTemp();
-            emit(tmp + " = " + e1.dir + " + " + t.dir);
+            emit(tmp + " = " + d1 + " + " + d2);
             RESULT = new ExprInfo("string", tmp);
         } else {
             semantic_error(e1left, e1right,
@@ -2767,12 +2917,20 @@ class CUP$Parser$actions {
 		ExprInfo t = (ExprInfo)((java_cup.runtime.Symbol) CUP$Parser$stack.peek()).value;
 		
         if (isNumeric(e1.type) && isNumeric(t.type)) {
-            String rtype = resultType(e1.type, t.type);
-            Integer cv = ("int".equals(rtype) && e1.constValue != null && t.constValue != null)
-                         ? e1.constValue - t.constValue : null;
-            String tmp = newTemp();
-            emit(tmp + " = " + e1.dir + " - " + t.dir);
-            RESULT = new ExprInfo(rtype, cv, tmp);
+            if (!isSameType(e1.type, t.type)) {
+                semantic_error(e1left, e1right,
+                    "'-': los operandos deben ser del mismo tipo, se obtuvo " +
+                    e1.type + " y " + t.type);
+                RESULT = ExprInfo.error();
+            } else {
+                String d1 = loadToTemp(e1.dir);
+                String d2 = loadToTemp(t.dir);
+                Integer cv = ("int".equals(e1.type) && e1.constValue != null && t.constValue != null)
+                             ? e1.constValue - t.constValue : null;
+                String tmp = newTemp();
+                emit(tmp + " = " + d1 + " - " + d2);
+                RESULT = new ExprInfo(e1.type, cv, tmp);
+            }
         } else {
             semantic_error(e1left, e1right,
                 "'-': tipos no compatibles: " + e1.type + " y " + t.type);
@@ -2807,12 +2965,20 @@ class CUP$Parser$actions {
 		ExprInfo p = (ExprInfo)((java_cup.runtime.Symbol) CUP$Parser$stack.peek()).value;
 		
         if (isNumeric(t.type) && isNumeric(p.type)) {
-            String rtype = resultType(t.type, p.type);
-            Integer cv = ("int".equals(rtype) && t.constValue != null && p.constValue != null)
-                         ? t.constValue * p.constValue : null;
-            String tmp = newTemp();
-            emit(tmp + " = " + t.dir + " * " + p.dir);
-            RESULT = new ExprInfo(rtype, cv, tmp);
+            if (!isSameType(t.type, p.type)) {
+                semantic_error(tleft, tright,
+                    "'*': los operandos deben ser del mismo tipo, se obtuvo " +
+                    t.type + " y " + p.type);
+                RESULT = ExprInfo.error();
+            } else {
+                String d1 = loadToTemp(t.dir);
+                String d2 = loadToTemp(p.dir);
+                Integer cv = ("int".equals(t.type) && t.constValue != null && p.constValue != null)
+                             ? t.constValue * p.constValue : null;
+                String tmp = newTemp();
+                emit(tmp + " = " + d1 + " * " + d2);
+                RESULT = new ExprInfo(t.type, cv, tmp);
+            }
         } else {
             semantic_error(tleft, tright,
                 "'*': tipos no compatibles: " + t.type + " y " + p.type);
@@ -2835,19 +3001,27 @@ class CUP$Parser$actions {
 		ExprInfo p = (ExprInfo)((java_cup.runtime.Symbol) CUP$Parser$stack.peek()).value;
 		
         if (isNumeric(t.type) && isNumeric(p.type)) {
-            String rtype = resultType(t.type, p.type);
-            Integer cv = null;
-            if ("int".equals(rtype) && t.constValue != null && p.constValue != null) {
-                if (p.constValue == 0) {
-                    semantic_error(tleft, tright,
-                        "Division entera por cero en expresion constante");
-                } else {
-                    cv = t.constValue / p.constValue;
+            if (!isSameType(t.type, p.type)) {
+                semantic_error(tleft, tright,
+                    "'/': los operandos deben ser del mismo tipo, se obtuvo " +
+                    t.type + " y " + p.type);
+                RESULT = ExprInfo.error();
+            } else {
+                String d1 = loadToTemp(t.dir);
+                String d2 = loadToTemp(p.dir);
+                Integer cv = null;
+                if ("int".equals(t.type) && t.constValue != null && p.constValue != null) {
+                    if (p.constValue == 0) {
+                        semantic_error(tleft, tright,
+                            "Division entera por cero en expresion constante");
+                    } else {
+                        cv = t.constValue / p.constValue;
+                    }
                 }
+                String tmp = newTemp();
+                emit(tmp + " = " + d1 + " / " + d2);
+                RESULT = new ExprInfo(t.type, cv, tmp);
             }
-            String tmp = newTemp();
-            emit(tmp + " = " + t.dir + " / " + p.dir);
-            RESULT = new ExprInfo(rtype, cv, tmp);
         } else {
             semantic_error(tleft, tright,
                 "'/': tipos no compatibles: " + t.type + " y " + p.type);
@@ -2870,6 +3044,8 @@ class CUP$Parser$actions {
 		ExprInfo p = (ExprInfo)((java_cup.runtime.Symbol) CUP$Parser$stack.peek()).value;
 		
         if ("int".equals(t.type) && "int".equals(p.type)) {
+            String d1 = loadToTemp(t.dir);
+            String d2 = loadToTemp(p.dir);
             Integer cv = null;
             if (t.constValue != null && p.constValue != null) {
                 if (p.constValue == 0) {
@@ -2880,9 +3056,10 @@ class CUP$Parser$actions {
                 }
             }
             String tmp = newTemp();
-            emit(tmp + " = " + t.dir + " % " + p.dir);
+            emit(tmp + " = " + d1 + " % " + d2);
             RESULT = new ExprInfo("int", cv, tmp);
         } else {
+            // para %, ambos deben ser int (ya que no mezcla int/int es trivial)
             semantic_error(tleft, tright,
                 "'%': ambos operandos deben ser int, se obtuvo " + t.type + " y " + p.type);
             RESULT = ExprInfo.error();
@@ -2916,17 +3093,25 @@ class CUP$Parser$actions {
 		ExprInfo p = (ExprInfo)((java_cup.runtime.Symbol) CUP$Parser$stack.peek()).value;
 		
         if (isNumeric(u.type) && isNumeric(p.type)) {
-            String rtype = resultType(u.type, p.type);
-            Integer cv = null;
-            if ("int".equals(rtype) && u.constValue != null && p.constValue != null
-                    && p.constValue >= 0) {
-                int base = u.constValue, exp = p.constValue, res = 1;
-                for (int k = 0; k < exp; k++) res *= base;
-                cv = res;
+            if (!isSameType(u.type, p.type)) {
+                semantic_error(uleft, uright,
+                    "'^': los operandos deben ser del mismo tipo, se obtuvo " +
+                    u.type + " y " + p.type);
+                RESULT = ExprInfo.error();
+            } else {
+                String d1 = loadToTemp(u.dir);
+                String d2 = loadToTemp(p.dir);
+                Integer cv = null;
+                if ("int".equals(u.type) && u.constValue != null && p.constValue != null
+                        && p.constValue >= 0) {
+                    int base = u.constValue, exp = p.constValue, res = 1;
+                    for (int k = 0; k < exp; k++) res *= base;
+                    cv = res;
+                }
+                String tmp = newTemp();
+                emit(tmp + " = " + d1 + " ^ " + d2);
+                RESULT = new ExprInfo(u.type, cv, tmp);
             }
-            String tmp = newTemp();
-            emit(tmp + " = " + u.dir + " ^ " + p.dir);
-            RESULT = new ExprInfo(rtype, cv, tmp);
         } else {
             semantic_error(uleft, uright,
                 "'^': tipos no compatibles: " + u.type + " y " + p.type);
@@ -2957,8 +3142,10 @@ class CUP$Parser$actions {
 		int vright = ((java_cup.runtime.Symbol)CUP$Parser$stack.peek()).right;
 		Integer v = (Integer)((java_cup.runtime.Symbol) CUP$Parser$stack.peek()).value;
 		
+        String tLit = newTemp();
+        emit(tLit + " = " + v.intValue());
         String tmp = newTemp();
-        emit(tmp + " = -" + v.intValue());
+        emit(tmp + " = -" + tLit);
         RESULT = new ExprInfo("int", -v.intValue(), tmp);
     
               CUP$Parser$result = parser.getSymbolFactory().newSymbol("unario",31, ((java_cup.runtime.Symbol)CUP$Parser$stack.elementAt(CUP$Parser$top-1)), ((java_cup.runtime.Symbol)CUP$Parser$stack.peek()), RESULT);
@@ -2973,8 +3160,10 @@ class CUP$Parser$actions {
 		int vright = ((java_cup.runtime.Symbol)CUP$Parser$stack.peek()).right;
 		Float v = (Float)((java_cup.runtime.Symbol) CUP$Parser$stack.peek()).value;
 		
+        String tLit = newTemp();
+        emit(tLit + " = " + v.floatValue());
         String tmp = newTemp();
-        emit(tmp + " = -" + v.floatValue());
+        emit(tmp + " = -" + tLit);
         RESULT = new ExprInfo("float", null, tmp);
     
               CUP$Parser$result = parser.getSymbolFactory().newSymbol("unario",31, ((java_cup.runtime.Symbol)CUP$Parser$stack.elementAt(CUP$Parser$top-1)), ((java_cup.runtime.Symbol)CUP$Parser$stack.peek()), RESULT);
@@ -2989,9 +3178,11 @@ class CUP$Parser$actions {
 		int vright = ((java_cup.runtime.Symbol)CUP$Parser$stack.peek()).right;
 		String v = (String)((java_cup.runtime.Symbol) CUP$Parser$stack.peek()).value;
 		
+        String tLit = newTemp();
+        emit(tLit + " = " + v);
         String tmp = newTemp();
-        emit(tmp + " = -" + v);
-        RESULT = new ExprInfo("float", null, tmp);
+        emit(tmp + " = -" + tLit);
+        RESULT = new ExprInfo("int", null, tmp);
     
               CUP$Parser$result = parser.getSymbolFactory().newSymbol("unario",31, ((java_cup.runtime.Symbol)CUP$Parser$stack.elementAt(CUP$Parser$top-1)), ((java_cup.runtime.Symbol)CUP$Parser$stack.peek()), RESULT);
             }
@@ -3005,8 +3196,10 @@ class CUP$Parser$actions {
 		int vright = ((java_cup.runtime.Symbol)CUP$Parser$stack.peek()).right;
 		String v = (String)((java_cup.runtime.Symbol) CUP$Parser$stack.peek()).value;
 		
+        String tLit = newTemp();
+        emit(tLit + " = " + v);
         String tmp = newTemp();
-        emit(tmp + " = -" + v);
+        emit(tmp + " = -" + tLit);
         RESULT = new ExprInfo("float", null, tmp);
     
               CUP$Parser$result = parser.getSymbolFactory().newSymbol("unario",31, ((java_cup.runtime.Symbol)CUP$Parser$stack.elementAt(CUP$Parser$top-1)), ((java_cup.runtime.Symbol)CUP$Parser$stack.peek()), RESULT);
@@ -3030,8 +3223,14 @@ class CUP$Parser$actions {
             RESULT = ExprInfo.error();
         } else {
             markInitialized(id);
-            emit(id + " = " + id + " + 1");   // id++ en codigo intermedio
-            RESULT = new ExprInfo(t, id);
+            // cargar variable e incrementar con temporal
+            String tVar = loadToTemp(id);
+            String tOne = newTemp();
+            emit(tOne + " = 1");
+            String tRes = newTemp();
+            emit(tRes + " = " + tVar + " + " + tOne);
+            emit(id + " = " + tRes);
+            RESULT = new ExprInfo(t, tRes);
         }
     
               CUP$Parser$result = parser.getSymbolFactory().newSymbol("unario",31, ((java_cup.runtime.Symbol)CUP$Parser$stack.elementAt(CUP$Parser$top-1)), ((java_cup.runtime.Symbol)CUP$Parser$stack.peek()), RESULT);
@@ -3055,8 +3254,14 @@ class CUP$Parser$actions {
             RESULT = ExprInfo.error();
         } else {
             markInitialized(id);
-            emit(id + " = " + id + " - 1");   // id-- en codigo intermedio
-            RESULT = new ExprInfo(t, id);
+            // cargar variable y decrementar con temporal
+            String tVar = loadToTemp(id);
+            String tOne = newTemp();
+            emit(tOne + " = 1");
+            String tRes = newTemp();
+            emit(tRes + " = " + tVar + " - " + tOne);
+            emit(id + " = " + tRes);
+            RESULT = new ExprInfo(t, tRes);
         }
     
               CUP$Parser$result = parser.getSymbolFactory().newSymbol("unario",31, ((java_cup.runtime.Symbol)CUP$Parser$stack.elementAt(CUP$Parser$top-1)), ((java_cup.runtime.Symbol)CUP$Parser$stack.peek()), RESULT);
@@ -3075,8 +3280,10 @@ class CUP$Parser$actions {
             semantic_error(pleft, pright,
                 "'$' (NOT): se esperaba bool, se obtuvo " + p.type);
         }
+        // cargar operando a temporal y operar
+        String d   = loadToTemp(p.dir);
         String tmp = newTemp();
-        emit(tmp + " = !" + p.dir);
+        emit(tmp + " = !" + d);
         RESULT = new ExprInfo("bool", tmp);
     
               CUP$Parser$result = parser.getSymbolFactory().newSymbol("unario",31, ((java_cup.runtime.Symbol)CUP$Parser$stack.elementAt(CUP$Parser$top-1)), ((java_cup.runtime.Symbol)CUP$Parser$stack.peek()), RESULT);
@@ -3119,12 +3326,14 @@ class CUP$Parser$actions {
         if (t == null) {
             RESULT = ExprInfo.error();
         } else if (isArrayType(t)) {
-            // Usar el nombre de un arreglo sin indices no esta permitido
             semantic_error(idleft, idright,
                 "'" + id + "' es un arreglo; use indexacion para acceder a sus elementos");
             RESULT = new ExprInfo(baseType(t), id);
         } else {
-            RESULT = new ExprInfo(t, id);
+            // cargar la variable a un temporal
+            String tmp = newTemp();
+            emit(tmp + " = " + id);
+            RESULT = new ExprInfo(t, tmp);
         }
     
               CUP$Parser$result = parser.getSymbolFactory().newSymbol("primario",32, ((java_cup.runtime.Symbol)CUP$Parser$stack.peek()), ((java_cup.runtime.Symbol)CUP$Parser$stack.peek()), RESULT);
@@ -3196,7 +3405,9 @@ class CUP$Parser$actions {
         for (int i = 0; i < args.size(); i++) {
             String paramType = (fi != null && i < fi.paramTypes.size())
                                ? fi.paramTypes.get(i) : args.get(i).type;
-            emit("param_" + (i + 1) + "_" + paramType + " " + args.get(i).dir);
+            // el argumento ya viene en un temporal (loadToTemp si no lo es)
+            String argDir = loadToTemp(args.get(i).dir);
+            emit("param_" + (i + 1) + "_" + paramType + " " + argDir);
         }
 
         String tmp = newTemp();
@@ -3255,7 +3466,12 @@ class CUP$Parser$actions {
 		int ileft = ((java_cup.runtime.Symbol)CUP$Parser$stack.peek()).left;
 		int iright = ((java_cup.runtime.Symbol)CUP$Parser$stack.peek()).right;
 		Integer i = (Integer)((java_cup.runtime.Symbol) CUP$Parser$stack.peek()).value;
-		 RESULT = new ExprInfo("int", i.intValue(), String.valueOf(i.intValue())); 
+		
+        // cargar el literal entero a un temporal
+        String tmp = newTemp();
+        emit(tmp + " = " + i.intValue());
+        RESULT = new ExprInfo("int", i.intValue(), tmp);
+    
               CUP$Parser$result = parser.getSymbolFactory().newSymbol("literal",33, ((java_cup.runtime.Symbol)CUP$Parser$stack.peek()), ((java_cup.runtime.Symbol)CUP$Parser$stack.peek()), RESULT);
             }
           return CUP$Parser$result;
@@ -3267,7 +3483,11 @@ class CUP$Parser$actions {
 		int fleft = ((java_cup.runtime.Symbol)CUP$Parser$stack.peek()).left;
 		int fright = ((java_cup.runtime.Symbol)CUP$Parser$stack.peek()).right;
 		Float f = (Float)((java_cup.runtime.Symbol) CUP$Parser$stack.peek()).value;
-		 RESULT = new ExprInfo("float", null, String.valueOf(f.floatValue())); 
+		
+        String tmp = newTemp();
+        emit(tmp + " = " + f.floatValue());
+        RESULT = new ExprInfo("float", null, tmp);
+    
               CUP$Parser$result = parser.getSymbolFactory().newSymbol("literal",33, ((java_cup.runtime.Symbol)CUP$Parser$stack.peek()), ((java_cup.runtime.Symbol)CUP$Parser$stack.peek()), RESULT);
             }
           return CUP$Parser$result;
@@ -3279,7 +3499,11 @@ class CUP$Parser$actions {
 		int sleft = ((java_cup.runtime.Symbol)CUP$Parser$stack.peek()).left;
 		int sright = ((java_cup.runtime.Symbol)CUP$Parser$stack.peek()).right;
 		String s = (String)((java_cup.runtime.Symbol) CUP$Parser$stack.peek()).value;
-		 RESULT = new ExprInfo("float", null, s); 
+		
+        String tmp = newTemp();
+        emit(tmp + " = " + s);
+        RESULT = new ExprInfo("int", null, tmp);
+    
               CUP$Parser$result = parser.getSymbolFactory().newSymbol("literal",33, ((java_cup.runtime.Symbol)CUP$Parser$stack.peek()), ((java_cup.runtime.Symbol)CUP$Parser$stack.peek()), RESULT);
             }
           return CUP$Parser$result;
@@ -3291,7 +3515,11 @@ class CUP$Parser$actions {
 		int sleft = ((java_cup.runtime.Symbol)CUP$Parser$stack.peek()).left;
 		int sright = ((java_cup.runtime.Symbol)CUP$Parser$stack.peek()).right;
 		String s = (String)((java_cup.runtime.Symbol) CUP$Parser$stack.peek()).value;
-		 RESULT = new ExprInfo("float", null, s); 
+		
+        String tmp = newTemp();
+        emit(tmp + " = " + s);
+        RESULT = new ExprInfo("float", null, tmp);
+    
               CUP$Parser$result = parser.getSymbolFactory().newSymbol("literal",33, ((java_cup.runtime.Symbol)CUP$Parser$stack.peek()), ((java_cup.runtime.Symbol)CUP$Parser$stack.peek()), RESULT);
             }
           return CUP$Parser$result;
@@ -3303,7 +3531,11 @@ class CUP$Parser$actions {
 		int bleft = ((java_cup.runtime.Symbol)CUP$Parser$stack.peek()).left;
 		int bright = ((java_cup.runtime.Symbol)CUP$Parser$stack.peek()).right;
 		Boolean b = (Boolean)((java_cup.runtime.Symbol) CUP$Parser$stack.peek()).value;
-		 RESULT = new ExprInfo("bool", null, String.valueOf(b.booleanValue())); 
+		
+        String tmp = newTemp();
+        emit(tmp + " = " + b.booleanValue());
+        RESULT = new ExprInfo("bool", null, tmp);
+    
               CUP$Parser$result = parser.getSymbolFactory().newSymbol("literal",33, ((java_cup.runtime.Symbol)CUP$Parser$stack.peek()), ((java_cup.runtime.Symbol)CUP$Parser$stack.peek()), RESULT);
             }
           return CUP$Parser$result;
@@ -3315,7 +3547,11 @@ class CUP$Parser$actions {
 		int cleft = ((java_cup.runtime.Symbol)CUP$Parser$stack.peek()).left;
 		int cright = ((java_cup.runtime.Symbol)CUP$Parser$stack.peek()).right;
 		Character c = (Character)((java_cup.runtime.Symbol) CUP$Parser$stack.peek()).value;
-		 RESULT = new ExprInfo("char", null, "'" + c.charValue() + "'"); 
+		
+        String tmp = newTemp();
+        emit(tmp + " = '" + c.charValue() + "'");
+        RESULT = new ExprInfo("char", null, tmp);
+    
               CUP$Parser$result = parser.getSymbolFactory().newSymbol("literal",33, ((java_cup.runtime.Symbol)CUP$Parser$stack.peek()), ((java_cup.runtime.Symbol)CUP$Parser$stack.peek()), RESULT);
             }
           return CUP$Parser$result;
@@ -3327,7 +3563,11 @@ class CUP$Parser$actions {
 		int sleft = ((java_cup.runtime.Symbol)CUP$Parser$stack.peek()).left;
 		int sright = ((java_cup.runtime.Symbol)CUP$Parser$stack.peek()).right;
 		String s = (String)((java_cup.runtime.Symbol) CUP$Parser$stack.peek()).value;
-		 RESULT = new ExprInfo("string", null, "\"" + s + "\""); 
+		
+        String tmp = newTemp();
+        emit(tmp + " = \"" + s + "\"");
+        RESULT = new ExprInfo("string", null, tmp);
+    
               CUP$Parser$result = parser.getSymbolFactory().newSymbol("literal",33, ((java_cup.runtime.Symbol)CUP$Parser$stack.peek()), ((java_cup.runtime.Symbol)CUP$Parser$stack.peek()), RESULT);
             }
           return CUP$Parser$result;

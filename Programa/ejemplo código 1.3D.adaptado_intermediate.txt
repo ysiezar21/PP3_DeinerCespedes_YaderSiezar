@@ -1,182 +1,318 @@
 func1:
 param_1_char x22
 param_2_char x23
-sss = "Hola"
-t1 = 20 + 21
-numero = t1
-letra = 'a'
-numero = numero + 1
-t2 = 10 + 24
-t3 = numero * t2
-t4 = 44 ^ 88
-t5 = t3 * t4
-numero = numero - 1
-t6 = t5 % numero
-g = t6
-param_1_char letra
-param_2_char 'b'
-t7 = call func1, 2
-t8 = 4.4 * t7
-t9 = t8 / 9.9
-t10 = t9 - 6//7
-h = t10
-write,int,numero
-t11 = -0.01
-ff = t11
-_miChar_ = '!'
-t12 = -1
-_x30_ = t12
-_x40_ = false
-t13 = 0 * 1
-t14 = 1 + 0
-t15 = _x50_[1]
-t16 = -9999
-t15 = t16
-write,string,"1****"
-t17 = _x30_ + 2
-t18 = _x30_ - 2
-t19 = t17 * 2
-t20 = t19 + t18
-t21 = _x502_[t20]
-param_1_char letra
-param_2_char 'c'
-t22 = call func1, 2
-t23 = t21 * t22
-ff = t23
-_x503_ = "Hola a todos los que est<<a>> haciendo un compilador nuevo|:n"
-write,string,_x503_
-t24 = 45 * 10
-t25 = numero + t24
-t26 = t25 <= 45
-t27 = ff < 5.6
-t28 = t26 && t27
-t29 = t28 || _x40_
-t30 = false == false
-t31 = t29 && t30
-t32 = false != true
-t33 = t31 || t32
-ifFalse t33 goto func1_else1
+t1 = "Hola"
+var_1_string sss
+sss = t1
+t2 = 20
+t3 = 21
+t4 = t2 + t3
+var_2_int numero
+numero = t4
+var_3_int g
+t5 = 'a'
+var_4_char letra
+letra = t5
+var_5_float h
+t6 = numero
+t7 = 1
+t8 = t6 + t7
+numero = t8
+t9 = 10
+t10 = 24
+t11 = t9 + t10
+t12 = t8 * t11
+t13 = 44
+t14 = 88
+t15 = t13 ^ t14
+t16 = t12 * t15
+t17 = numero
+t18 = 1
+t19 = t17 - t18
+numero = t19
+t20 = t16 % t19
+g = t20
+t21 = 4.4
+t22 = letra
+t23 = 'b'
+param_1_char t22
+param_2_char t23
+t24 = call func1, 2
+t25 = t21 * t24
+t26 = 9.9
+t27 = t25 / t26
+t28 = 6//7
+t29 = t27 - t28
+h = t29
+t30 = numero
+write,int,t30
+t31 = 0.01
+t32 = -t31
+var_6_float ff
+ff = t32
+t33 = '!'
+var_7_char _miChar_
+_miChar_ = t33
+t34 = 1
+t35 = -t34
+var_8_int _x30_
+_x30_ = t35
+t36 = false
+var_9_bool _x40_
+_x40_ = t36
+t37 = 4
+t38 = 5
+var_10_int[1][2] _x50_
+t39 = 0
+t40 = 1
+t41 = t39 * t40
+t42 = 1
+t43 = 0
+t44 = t42 + t43
+t45 = 1
+t46 = _x50_[t45]
+t47 = 9999
+t48 = -t47
+t46 = t48
+t49 = 5.5
+t50 = 6.4
+t51 = 7.7
+t52 = 8.8
+var_11_float[2][2] _x502_
+t53 = "1****"
+write,string,t53
+t54 = _x30_
+t55 = 2
+t56 = t54 + t55
+t57 = _x30_
+t58 = 2
+t59 = t57 - t58
+t60 = 2
+t61 = t56 * t60
+t62 = t61 + t59
+t63 = _x502_[t62]
+t64 = letra
+t65 = 'c'
+param_1_char t64
+param_2_char t65
+t66 = call func1, 2
+t67 = t63 * t66
+ff = t67
+t68 = "Hola a todos los que est<<a>> haciendo un compilador nuevo|:n"
+var_12_string _x503_
+_x503_ = t68
+t69 = _x503_
+write,string,t69
+t70 = numero
+t71 = 45
+t72 = 10
+t73 = t71 * t72
+t74 = t70 + t73
+t75 = 45
+t76 = t74 <= t75
+t77 = ff
+t78 = 5.6
+t79 = t77 < t78
+t80 = t76 && t79
+t81 = _x40_
+t82 = t80 || t81
+t83 = false
+t84 = false
+t85 = t83 == t84
+t86 = t82 && t85
+t87 = false
+t88 = true
+t89 = t87 != t88
+t90 = t86 || t89
+ifFalse t90 goto func1_else1
 func1_if1:
-write,string,"2****"
-t34 = ff > 5.6
-t35 = numero > 45
-t36 = t34 || t35
-t37 = !t36
-ifFalse t37 goto func1_else2
+var_13_int y1
+t91 = "2****"
+write,string,t91
+t92 = ff
+t93 = 5.6
+t94 = t92 > t93
+t95 = numero
+t96 = 45
+t97 = t95 > t96
+t98 = t94 || t97
+t99 = !t98
+ifFalse t99 goto func1_else2
 func1_if2:
-ch33 = 'a'
+var_14_int y
+t100 = 'a'
+var_15_char ch33
+ch33 = t100
 func1_else2:
 func1_endif2:
-write,string,"2****"
-ch33 = 'a'
+t101 = "2****"
+write,string,t101
+t102 = 'a'
+var_16_char ch33
+ch33 = t102
 goto func1_endif1
 func1_else1:
-write,string,"3****"
-y2 = 45
-str2 = "dddfffddd"
+t103 = "3****"
+write,string,t103
+t104 = 45
+var_17_int y2
+y2 = t104
+t105 = "dddfffddd"
+var_18_string str2
+str2 = t105
 func1_do1:
-write,string,_x503_
-write,string,"4!!!!!!!!!!!!!!!!!"
-t38 = y2
-tsw1 = 1
-t39 = t38
+t106 = _x503_
+write,string,t106
+t107 = "4!!!!!!!!!!!!!!!!!"
+write,string,t107
+t108 = y2
+t109 = 1
+tsw1 = t109
 goto func1_do1_switch1_case1
+t110 = 45
 
 func1_do1_switch1_case1:
-t40 = tsw1
-t41 = t40 == 0
-if t41 goto func1_do1_switch1_case1_end
-t42 = 45
-t43 = t39 == t42
-if t43 goto func1_do1_switch1_case1_b
+t111 = tsw1
+t112 = 0
+t113 = t111 == t112
+if t113 goto func1_do1_switch1_case1_b
+t114 = t108 == t110
+if t114 goto func1_do1_switch1_case1_b
 goto func1_do1_switch1_case1_end
 
 func1_do1_switch1_case1_b:
-t44 = 0
-tsw1 = t44
-write,int,g
-g = 200000
-write,float,ff
+t115 = 0
+tsw1 = t115
+t116 = g
+write,int,t116
+t117 = 200000
+g = t117
+t118 = ff
+write,float,t118
 goto func1_do1_switch1_end
-goto func1_do1_switch1_case1_end
 
 func1_do1_switch1_case1_end:
 goto func1_do1_switch1_case2
+t119 = 777
 
 func1_do1_switch1_case2:
-t45 = tsw1
-t46 = t45 == 0
-if t46 goto func1_do1_switch1_case2_end
-t47 = 777
-t48 = t39 == t47
-if t48 goto func1_do1_switch1_case2_b
+t120 = tsw1
+t121 = 0
+t122 = t120 == t121
+if t122 goto func1_do1_switch1_case2_b
+t123 = t108 == t119
+if t123 goto func1_do1_switch1_case2_b
 goto func1_do1_switch1_case2_end
 
 func1_do1_switch1_case2_b:
-t49 = 0
-tsw1 = t49
-write,float,ff
-g = 211111
-write,float,ff
+t124 = 0
+tsw1 = t124
+t125 = ff
+write,float,t125
+t126 = 211111
+g = t126
+t127 = ff
+write,float,t127
 goto func1_do1_switch1_case2_end
 
 func1_do1_switch1_case2_end:
 goto func1_do1_switch1_default
 
 func1_do1_switch1_default:
-t50 = tsw1
-t51 = t50 == 0
-if t51 goto func1_do1_switch1_default_end
+t128 = tsw1
+t129 = 0
+t130 = t128 == t129
+if t130 goto func1_do1_switch1_default_end
 goto func1_do1_switch1_default_b
 
 func1_do1_switch1_default_b:
-t52 = 0
-tsw1 = t52
-write,int,g
-g = 22222222
-write,int,g
+t131 = 0
+tsw1 = t131
+t132 = g
+write,int,t132
+t133 = 22222222
+g = t133
+t134 = g
+write,int,t134
 goto func1_do1_switch1_default_end
 
 func1_do1_switch1_default_end:
 goto func1_do1_switch1_end
 func1_do1_switch1_end:
-write,string,"4!!!!!!!!!!!!!!!!!"
-t53 = true || false
-t54 = t53 && _x40_
-if t54 goto func1_do1
+t135 = "4!!!!!!!!!!!!!!!!!"
+write,string,t135
+t136 = true
+t137 = false
+t138 = t136 || t137
+t139 = _x40_
+t140 = t138 && t139
+if t140 goto func1_do1
 func1_do1_end:
-write,string,"3****"
+t141 = "3****"
+write,string,t141
 func1_endif1:
-write,string,"Hola mundo"
-t55 = -5.6
-t56 = t55 / ff
-param_1_char letra
-param_2_char 'd'
-t57 = call func1, 2
-t58 = t56 * t57
-return t58
+t142 = "Hola mundo"
+write,string,t142
+t143 = 5.6
+t144 = -t143
+t145 = ff
+t146 = t144 / t145
+t147 = letra
+t148 = 'd'
+param_1_char t147
+param_2_char t148
+t149 = call func1, 2
+t150 = t146 * t149
+return t150
 _func2_:
 param_1_float _b1_
 param_2_int _i1_
-return _i1_
+var_19_int j
+t151 = _i1_
+return t151
 _func3_:
-return true
+var_20_string _b1_
+t152 = true
+return t152
 main:
-miChar = '!'
-str1 = "Mi string~1"
-fl1 = 56.6
-in1 = 10
-t59 = 6.7 != 8.9
-bl0 = t59
-param_1_char miChar
-param_2_char 'e'
-t60 = call func1, 2
-t61 = t60 * 5.5
-t62 = _x50_[0]
-t63 = in1 / t62
-param_1_float t61
-param_2_int t63
-t64 = call _func2_, 2
-t65 = 0 + t64
-t66 = t65 + 0
-in1 = t66
+t153 = '!'
+var_21_char miChar
+miChar = t153
+t154 = "Mi string~1"
+var_22_string str1
+str1 = t154
+t155 = 56.6
+var_23_float fl1
+fl1 = t155
+t156 = 10
+var_24_int in1
+in1 = t156
+t157 = 6.7
+t158 = 8.9
+t159 = t157 != t158
+var_25_bool bl0
+bl0 = t159
+t160 = 4
+t161 = 5
+var_26_int[1][2] _x50_
+t162 = 0
+t163 = miChar
+t164 = 'e'
+param_1_char t163
+param_2_char t164
+t165 = call func1, 2
+t166 = 5.5
+t167 = t165 * t166
+t168 = in1
+t169 = 0
+t170 = 0
+t171 = 0
+t172 = _x50_[t171]
+t173 = t168 / t172
+param_1_float t167
+param_2_int t173
+t174 = call _func2_, 2
+t175 = t162 + t174
+t176 = 0
+t177 = t175 + t176
+in1 = t177
