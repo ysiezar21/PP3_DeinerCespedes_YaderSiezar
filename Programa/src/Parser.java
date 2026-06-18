@@ -1273,6 +1273,11 @@ public class Parser extends java_cup.runtime.lr_parser {
                            ", columna " + col + ": " + msg);
     }
 
+    public List<String> getIntermediateCode() {
+    return Collections.unmodifiableList(code);
+    }
+
+
 
 /** Cup generated class to encapsulate user supplied action code.*/
 @SuppressWarnings({"rawtypes", "unchecked", "unused"})

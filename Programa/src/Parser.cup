@@ -488,6 +488,11 @@ parser code {:
         System.err.println("Error semantico en linea " + line +
                            ", columna " + col + ": " + msg);
     }
+
+    public List<String> getIntermediateCode() {
+    return Collections.unmodifiableList(code);
+    }
+
 :}
 
 // ==============================================================

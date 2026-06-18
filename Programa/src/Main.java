@@ -1,8 +1,9 @@
 /**
  * Main.java - Punto de entrada del compilador.
- * Objetivo:   Orquestar el analisis lexico, sintactico y semantico.
+ * Objetivo:   Orquestar el analisis lexico, sintactico, semantico
+ *             y la generacion de codigo MIPS.
  * Entrada:    Archivo fuente (.txt) pasado como argumento.
- * Salida:     Archivos _tokens.txt, _symbols.txt y resultado en consola.
+ * Salida:     _tokens.txt, _symbols.txt, _intermediate.txt, _mips.asm
  */
 
 import java.io.*;
@@ -37,6 +38,12 @@ public class Main {
             boolean ok = (parser.errorCount == 0 && parser.semErrorCount == 0);
             if (ok) {
                 System.out.println("Resultado: El archivo Si puede ser generado por la gramatica.");
+
+                // Generacion de codigo MIPS
+                MipsGenerator mipsGen = new MipsGenerator(
+                        parser.getIntermediateCode(), baseName);
+                mipsGen.generate();
+
             } else {
                 System.out.println("Resultado: El archivo NO puede ser generado por la gramatica.");
                 if (parser.errorCount > 0)
@@ -44,9 +51,10 @@ public class Main {
                 if (parser.semErrorCount > 0)
                     System.out.println("  Errores semanticos  : " + parser.semErrorCount);
             }
+
             System.out.println("Archivos generados:");
-            System.out.println("  Tokens   -> " + tokenFile);
-            System.out.println("  Simbolos -> " + symbolFile);
+            System.out.println("  Tokens     -> " + tokenFile);
+            System.out.println("  Simbolos   -> " + symbolFile);
             System.out.println("  Intermedio -> " + baseName + "_intermediate.txt");
 
         } catch (FileNotFoundException e) {
