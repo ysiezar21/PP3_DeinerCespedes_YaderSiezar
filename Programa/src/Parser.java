@@ -2397,8 +2397,21 @@ class CUP$Parser$actions {
         emit(tFlagCmp + " = " + tFlag + " == " + tZero);
         emit("if " + tFlagCmp + " goto " + caseBody);
 
-        // ── Comparar el selector con el literal de este case 
-        String tLit = loadToTemp(lit.dir);
+        // ── Comparar el selector con el literal de este case ──────────
+        // CORRECCION: NO reutilizar lit.dir, porque ese temporal pudo
+        // haber sido emitido ANTES del "goto swLabel_case1" (codigo
+        // inalcanzable en tiempo de ejecucion si este case no es el
+        // primero). En su lugar, se vuelve a cargar el valor del
+        // literal AQUI, dentro de la etiqueta del case, usando el
+        // valor constante o el lexema original segun corresponda.
+        String tLit = newTemp();
+        if (lit.constValue != null) {
+            emit(tLit + " = " + lit.constValue);
+        } else {
+            // literales no enteros (char, bool, etc.) -> usar el dir original
+            // como valor literal (no como referencia a un temporal viejo)
+            emit(tLit + " = " + lit.dir);
+        }
         String tSel = loadToTemp(swDir);
         String tCmp = newTemp();
         emit(tCmp + " = " + tSel + " == " + tLit);

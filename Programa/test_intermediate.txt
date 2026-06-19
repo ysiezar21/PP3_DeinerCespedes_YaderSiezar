@@ -21,58 +21,60 @@ t9 = tsw1
 t10 = 0
 t11 = t9 == t10
 if t11 goto main_switch1_case1_b
-t12 = t6 == t8
-if t12 goto main_switch1_case1_b
+t12 = 15
+t13 = t6 == t12
+if t13 goto main_switch1_case1_b
 goto main_switch1_case1_end
 
 main_switch1_case1_b:
-t13 = 0
-tsw1 = t13
-t14 = 100
-a = t14
-t15 = a
-write,int,t15
+t14 = 0
+tsw1 = t14
+t15 = 100
+a = t15
+t16 = a
+write,int,t16
 goto main_switch1_end
 
 main_switch1_case1_end:
 goto main_switch1_case2
-t16 = 20
+t17 = 20
 
 main_switch1_case2:
-t17 = tsw1
-t18 = 0
-t19 = t17 == t18
-if t19 goto main_switch1_case2_b
-t20 = t6 == t16
+t18 = tsw1
+t19 = 0
+t20 = t18 == t19
 if t20 goto main_switch1_case2_b
+t21 = 20
+t22 = t6 == t21
+if t22 goto main_switch1_case2_b
 goto main_switch1_case2_end
 
 main_switch1_case2_b:
-t21 = 0
-tsw1 = t21
-t22 = 200
-a = t22
+t23 = 0
+tsw1 = t23
+t24 = 200
+a = t24
 goto main_switch1_case2_end
 
 main_switch1_case2_end:
 goto main_switch1_default
 
 main_switch1_default:
-t23 = tsw1
-t24 = 0
-t25 = t23 == t24
-if t25 goto main_switch1_default_end
+t25 = tsw1
+t26 = 0
+t27 = t25 == t26
+if t27 goto main_switch1_default_end
 goto main_switch1_default_b
 
 main_switch1_default_b:
-t26 = 0
-tsw1 = t26
-t27 = 0
-a = t27
+t28 = 0
+tsw1 = t28
+t29 = 0
+a = t29
 goto main_switch1_default_end
 
 main_switch1_default_end:
 goto main_switch1_end
 main_switch1_end:
-t28 = a
-write,int,t28
+t30 = a
+write,int,t30
