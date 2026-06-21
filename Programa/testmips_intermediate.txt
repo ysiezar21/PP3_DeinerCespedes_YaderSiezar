@@ -342,3 +342,5 @@ t150 = t148 % t149
 a = t150
 t151 = a
 write,int,t151
+t152 = "Fin pruebas!"
+write,string,t152

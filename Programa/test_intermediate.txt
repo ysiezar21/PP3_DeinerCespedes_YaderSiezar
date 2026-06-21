@@ -1,80 +1,32 @@
 main:
+t1 = "asig a"
+write,string,t1
 var_1_int a
+t2 = "asig b"
+write,string,t2
 var_2_int b
+t3 = "asig c"
+write,string,t3
 var_3_int c
-t1 = 10
-a = t1
-t2 = 5
-b = t2
-t3 = a
-t4 = b
-t5 = t3 + t4
-c = t5
-t6 = c
-t7 = 1
-tsw1 = t7
-goto main_switch1_case1
-t8 = 15
-
-main_switch1_case1:
-t9 = tsw1
-t10 = 0
-t11 = t9 == t10
-if t11 goto main_switch1_case1_b
-t12 = 15
-t13 = t6 == t12
-if t13 goto main_switch1_case1_b
-goto main_switch1_case1_end
-
-main_switch1_case1_b:
-t14 = 0
-tsw1 = t14
-t15 = 100
-a = t15
-t16 = a
-write,int,t16
-goto main_switch1_end
-
-main_switch1_case1_end:
-goto main_switch1_case2
-t17 = 20
-
-main_switch1_case2:
-t18 = tsw1
-t19 = 0
-t20 = t18 == t19
-if t20 goto main_switch1_case2_b
-t21 = 20
-t22 = t6 == t21
-if t22 goto main_switch1_case2_b
-goto main_switch1_case2_end
-
-main_switch1_case2_b:
-t23 = 0
-tsw1 = t23
-t24 = 200
-a = t24
-goto main_switch1_case2_end
-
-main_switch1_case2_end:
-goto main_switch1_default
-
-main_switch1_default:
-t25 = tsw1
-t26 = 0
-t27 = t25 == t26
-if t27 goto main_switch1_default_end
-goto main_switch1_default_b
-
-main_switch1_default_b:
-t28 = 0
-tsw1 = t28
-t29 = 0
-a = t29
-goto main_switch1_default_end
-
-main_switch1_default_end:
-goto main_switch1_end
-main_switch1_end:
-t30 = a
-write,int,t30
+t4 = "a = 10"
+write,string,t4
+t5 = 10
+a = t5
+t6 = a
+write,int,t6
+t7 = "b = 5"
+write,string,t7
+t8 = 5
+b = t8
+t9 = b
+write,int,t9
+t10 = "c = a + b"
+write,string,t10
+t11 = a
+t12 = b
+t13 = t11 + t12
+c = t13
+t14 = "El resultado en c es: "
+write,string,t14
+t15 = c
+write,int,t15

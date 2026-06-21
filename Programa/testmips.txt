@@ -110,4 +110,6 @@ empty~__main__<||>|:
     cout~<|a|>!
     a<- 10 % 3!
     cout~<|a|>!
+
+    cout~<|"Fin pruebas!"|>!
 :|

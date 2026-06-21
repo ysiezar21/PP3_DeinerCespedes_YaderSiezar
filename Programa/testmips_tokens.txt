@@ -444,4 +444,10 @@ ID_LEXEMA 	LiNEA 	COLUMNA 	TOKEN                	LEXEMA
 26        	112   	12      	ID                   	a
 8         	112   	13      	RPAR                 	|>
 12        	112   	15      	EXCLAMATION          	!
-13        	113   	1       	RBLOCK               	:|
+39        	114   	5       	COUT                 	cout
+2         	114   	9       	SEPARATOR            	~
+4         	114   	10      	LPAR                 	<|
+65        	114   	12      	STRING_LIT           	"Fin pruebas!"
+8         	114   	26      	RPAR                 	|>
+12        	114   	28      	EXCLAMATION          	!
+13        	115   	1       	RBLOCK               	:|

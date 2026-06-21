@@ -56,6 +56,7 @@ public class Main {
             System.out.println("  Tokens     -> " + tokenFile);
             System.out.println("  Simbolos   -> " + symbolFile);
             System.out.println("  Intermedio -> " + baseName + "_intermediate.txt");
+            System.out.println("  MIPS       -> " + baseName + "_mips.asm");
 
         } catch (FileNotFoundException e) {
             System.err.println("Error: Archivo no encontrado - " + sourceFile);
