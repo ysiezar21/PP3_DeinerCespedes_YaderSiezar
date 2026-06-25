@@ -53,6 +53,43 @@
  *     string como "c = a + b" ya NO se interpreta como una operacion
  *     binaria solo porque contiene un caracter '+', '-', etc. en su
  *     interior. Ver isCompleteStringLiteral()/findClosingQuote().
+ *  9. [FIX-POWER] emitPower ya NO reutiliza los registros ra/rb/rd que
+ *     vengan del allocador. El bucle de potencia opera ahora sobre
+ *     registros dedicados ($t8 base, $t9 exponente, $t6 acumulador),
+ *     evitando que una colision accidental de registros (ra==rd o
+ *     rb==rd, que SI puede ocurrir porque la potencia es un bucle de
+ *     varias instrucciones y no una operacion atomica) corrompa el
+ *     contador del exponente y produzca un bucle infinito. Ver detalle
+ *     en el comentario de emitPower().
+ * 10. [FIX-PARAM] *** CAUSA RAIZ REAL DEL "BUCLE INFINITO" EN LLAMADAS ***
+ *     El dispatcher translate() (y firstPass()/copyArgsToFrame()) usaban
+ *     el criterio "!ln.contains(\"call\")" para distinguir un parametro
+ *     FORMAL ("param_1_int n", en la definicion de una funcion) de un
+ *     parametro ACTUAL ("param_1_int t103", justo antes de una llamada).
+ *     Ese criterio es INUTIL: ninguna de las dos lineas contiene jamas la
+ *     palabra "call" (esa palabra solo aparece en la linea separada
+ *     "tN = call func, n"), asi que TODO parametro actual caia siempre en
+ *     la rama de "ignorar" pensada solo para parametros formales, y
+ *     pendingParams quedaba siempre vacio al llegar a emitCall(). Esto
+ *     significaba que ninguna llamada a funcion con argumentos (p.ej.
+ *     factorial(5), suma(7,8)) movia realmente esos valores a $a0/$a1/..:
+ *     la funcion llamada arrancaba con sus parametros formales llenos de
+ *     basura de memoria. En el caso de factorial(n), "n" nunca era 5 sino
+ *     un valor arbitrario, por lo que la condicion "i <= n" del do-while
+ *     podia tardar centenares de miles de iteraciones (o mas) antes de
+ *     volverse falsa -- visto en QtSpim como un bucle infinito.
+ *     Correccion: se reemplazo ese criterio textual inutil por un criterio
+ *     POSICIONAL real (bandera inFormalParamZone). Esta bandera es true
+ *     UNICAMENTE mientras se leen, inmediatamente despues de la etiqueta
+ *     de una funcion, sus parametros formales; se cierra en cuanto aparece
+ *     cualquier otra linea, y solo se reabre en la siguiente etiqueta de
+ *     funcion. Cualquier "param_" visto fuera de esa zona es, sin
+ *     ambiguedad, un parametro ACTUAL y se acumula correctamente en
+ *     pendingParams para que emitCall() lo mueva a $a0/$a1/etc. El mismo
+ *     fix se aplico en firstPass() (para no duplicar/pisar el offset de un
+ *     temporal usado como argumento) y en copyArgsToFrame() (para no
+ *     confundir parametros actuales de una llamada interna con parametros
+ *     formales de la funcion contenedora).
  * ============================================================
  */
 
@@ -74,6 +111,26 @@ public class MipsGenerator {
     private final Map<String, Map<String, Integer>> funcOffsets = new LinkedHashMap<>();
     private Map<String, Integer> curOff  = null;
     private String               curFunc = null;
+
+    /**
+     * [FIX-PARAM] Bandera de estado: true mientras estamos justo despues de
+     * la etiqueta de una funcion, leyendo su lista de parametros FORMALES
+     * (las lineas "param_N_tipo nombre" que aparecen inmediatamente tras
+     * "funcName:" en la definicion de la funcion, ej. "param_1_int n").
+     *
+     * Se activa en emitPrologue() (justo al entrar a una funcion) y se
+     * desactiva en cuanto translate() procesa la PRIMERA linea que no sea
+     * un "param_" formal (es decir, en cuanto empieza el cuerpo real de la
+     * funcion). A partir de ahi, cualquier linea "param_N_tipo val" que
+     * aparezca en translate() es necesariamente un PARAMETRO ACTUAL previo
+     * a una llamada (ej. "param_1_int t103" antes de "t104 = call factorial, 1"),
+     * sin importar si esa linea contiene o no la palabra "call" (que nunca
+     * la contiene en ningun caso, formal o actual: ese criterio anterior
+     * era inutil para distinguirlos y causaba que TODO parametro actual se
+     * ignorara silenciosamente, dejando $a0/$a1/etc. sin el valor real del
+     * argumento al hacer jal).
+     */
+    private boolean inFormalParamZone = false;
 
     // ── Tamanio total de cada frame (para el epilogo) ─────────────
     private final Map<String, Integer> frameSz = new HashMap<>();
@@ -142,6 +199,15 @@ public class MipsGenerator {
         String               fn  = null;
         Map<String, Integer> off = null;
         int                  ofs = 0;
+        // [FIX-PARAM] Misma zona de parametros formales que en translate(),
+        // pero aplicada aqui durante la primera pasada de offsets. Sin esto,
+        // una linea "param_N_tipo tX" usada como parametro ACTUAL de una
+        // llamada (ej. "param_1_int t103" antes de "t104 = call factorial, 1")
+        // se confundia con un parametro FORMAL y se le reservaba un SEGUNDO
+        // offset duplicado para el mismo temporal "t103" dentro del frame de
+        // la funcion llamante, pisando el offset que el temporal ya tenia
+        // asignado por la regla de "Temporales (tN = ...)" mas abajo.
+        boolean firstPassInFormalZone = false;
 
         for (String raw : ir) {
             String ln = raw.trim();
@@ -154,6 +220,7 @@ public class MipsGenerator {
                 ofs = 0;
                 funcOffsets.put(fn, off);
                 funcNames.add(fn);
+                firstPassInFormalZone = true; // [FIX-PARAM] reabrir zona al entrar a una funcion
                 continue;
             }
 
@@ -163,6 +230,7 @@ public class MipsGenerator {
 
             // Declaracion de variable
             if (ln.startsWith("var_")) {
+                firstPassInFormalZone = false; // [FIX-PARAM] una var_ cierra la zona de parametros formales
                 String[] p    = ln.split("\\s+", 2);
                 String   name = p.length == 2 ? p[1] : "";
                 String   tipo = extractVarType(p[0]);
@@ -177,8 +245,14 @@ public class MipsGenerator {
                 continue;
             }
 
-            // Parametro formal (siempre se necesita: recibe argumento)
-            if (ln.startsWith("param_") && !ln.contains("=") && !ln.contains("call")) {
+            // [FIX-PARAM] Parametro FORMAL: solo si seguimos en la zona de
+            // parametros formales (inmediatamente tras la etiqueta de funcion).
+            // Cualquier "param_" fuera de esta zona es un parametro ACTUAL de
+            // una llamada, y NO debe recibir un offset propio aqui (su valor
+            // ya vive en el temporal/variable que se referencia, el cual ya
+            // tiene su propio offset asignado por la regla de variables o
+            // temporales correspondiente).
+            if (ln.startsWith("param_") && !ln.contains("=") && firstPassInFormalZone) {
                 String[] p    = ln.split("\\s+", 2);
                 String   name = p.length == 2 ? p[1] : "";
                 String   tipo = extractParamType(p[0]);
@@ -188,8 +262,48 @@ public class MipsGenerator {
                 continue;
             }
 
-            // Temporales (tN = ...)
-            Matcher ma = Pattern.compile("^(t\\d+)\\s*=").matcher(ln);
+            // [FIX-PARAM] Cualquier otra linea (incluyendo un "param_" actual
+            // fuera de la zona formal) cierra definitivamente la zona, hasta
+            // la proxima etiqueta de funcion.
+            firstPassInFormalZone = false;
+
+            // Temporales (tN = ...) y variable de control sintetica de switch
+            // (tswN = ..., generada por Parser.cup para recordar el valor del
+            // selector del switch a traves de sus comparaciones de case).
+            //
+            // [FIX-TSW] *** CAUSA RAIZ: $fp DEL LLAMADOR CORROMPIDO TRAS UN
+            // SWITCH ***
+            // Parser.cup emite una variable de control de switch con el
+            // patron "tsw" + contador (ej. "tsw1"), NO "t" + digitos. El
+            // regex anterior, "^(t\\d+)\\s*=", no reconoce "tsw1" como
+            // temporal (\\d+ no matchea "sw1"), asi que firstPass() nunca le
+            // reservaba un slot propio ni lo contaba al calcular el tamanio
+            // total del frame.
+            //
+            // Cuando secondPass() necesitaba el offset de "tsw1" por primera
+            // vez (al traducir "tsw1 = t15" o "t17 = tsw1"), caia en
+            // ensureSlot(), que crea un slot de emergencia con
+            // "minOff - 4" usando el offset minimo visto HASTA ESE MOMENTO
+            // de la segunda pasada -- sin saber que el frame ya habia sido
+            // dimensionado (en la primera pasada) sin contar este slot
+            // adicional. El resultado podia coincidir EXACTAMENTE con la
+            // zona reservada para "$ra"/"$fp" guardados en el prologo
+            // (0($sp)/4($sp), que en terminos de $fp equivale a
+            // -total($fp)/-(total-4)($fp)): el switch sobreescribia
+            // silenciosamente el $fp del llamador guardado en pila, y al
+            // restaurarlo en el epilogo ("lw $fp, 4($sp)") la funcion
+            // devolvia un $fp corrupto (tipicamente 0) en vez del real.
+            // Esto rompia cualquier acceso a memoria del llamador inmediato
+            // despues del return (ej. "sw $v0, -76($fp)" con $fp=0 cae en
+            // 0xffffffb4, reportado por QtSpim como
+            // "Write to unused memory-mapped IO address").
+            //
+            // Fix: reconocer tambien "tswN" en este regex, para que reciba
+            // su slot durante la PRIMERA pasada -- igual que cualquier otro
+            // temporal -- y asi quede correctamente contabilizado en el
+            // tamanio total del frame, sin poder colisionar nunca con la
+            // zona de $ra/$fp guardados.
+            Matcher ma = Pattern.compile("^(tsw\\d+|t\\d+)\\s*=").matcher(ln);
             if (ma.find()) {
                 String tmp = ma.group(1);
                 if (!offFinal.containsKey(tmp)) {
@@ -482,7 +596,31 @@ public class MipsGenerator {
     // =================================================================
     private void secondPass() {
         dataSec.append(".data\n");
+        // [FIX-ENTRYPOINT] Forzar el punto de entrada real del programa a 'main',
+        // sin depender de que el simulador (MARS/SPIM) este configurado con la
+        // opcion "Initialize Program Counter to global 'main' if defined".
+        //
+        // Causa raiz del bug original: este generador siempre emite las
+        // funciones del usuario en el mismo orden en que aparecen en el
+        // codigo fuente, y la gramatica obliga a que 'main' (__main__) sea
+        // la ULTIMA funcion del archivo. Si el simulador arranca ejecutando
+        // desde la primera instruccion de .text (comportamiento por defecto
+        // en muchas configuraciones de MARS), termina ejecutando el cuerpo
+        // de OTRA funcion (la primera declarada) antes de que nadie haya
+        // inicializado $sp/$fp con un valor de pila real. Como $sp/$fp
+        // arrancan en 0 en ese escenario, el primer "addi $sp,$sp,-N" deja
+        // $fp en una direccion cercana a 0, y cualquier acceso posterior del
+        // tipo "sw $tX, -K($fp)" cae en una direccion negativa con signo
+        // (ej. 0xffffffb4), que en MARS corresponde a memoria mapeada de
+        // E/S no usada -> "Write to unused memory-mapped IO address".
+        //
+        // La unica forma de garantizar el arranque correcto SIN depender de
+        // configuracion externa (el .asm generado no se vuelve a tocar a
+        // mano) es emitir un salto incondicional a 'main' como la PRIMERA
+        // instruccion real de .text, sin importar en que orden se hayan
+        // generado las demas funciones.
         textSec.append("\n.text\n.globl main\n\n");
+        textSec.append("    j main\n\n");
 
         boolean afterJump = false;
 
@@ -544,17 +682,56 @@ public class MipsGenerator {
         // 3. Declaracion de variable: ignorar (espacio ya reservado en firstPass)
         if (ln.startsWith("var_")) return;
 
-        // 4. Parametro formal en definicion de funcion: ignorar
-        if (ln.startsWith("param_") && !ln.contains("=") && !ln.contains("call")) return;
-
-        // 5. Parametro actual antes de un call (acumular)
+        /*
+         * [FIX-PARAM] CORRECCION DE BUG CRITICO: distincion entre parametro
+         * FORMAL (definicion de funcion, ej. "param_1_int n") y parametro
+         * ACTUAL (justo antes de una llamada, ej. "param_1_int t103").
+         *
+         * Ambas lineas tienen EXACTAMENTE el mismo formato textual
+         * "param_N_tipo nombre" y NINGUNA de las dos contiene jamas la
+         * palabra "call" en el codigo intermedio real (el "call" aparece
+         * en una linea SEPARADA: "tN = call func, n"). El criterio anterior
+         * (!ln.contains("call")) era por lo tanto SIEMPRE verdadero para
+         * cualquier linea "param_" sin "=", asi que TODO parametro actual
+         * caia incorrectamente en la rama de "ignorar" (pensada solo para
+         * parametros formales) y nunca se acumulaba en pendingParams.
+         *
+         * Efecto real observado: emitCall() nunca tenia argumentos
+         * pendientes que mover a $a0/$a1/.., asi que cualquier llamada a
+         * funcion (factorial(5), suma(7,8), etc.) se ejecutaba con
+         * parametros formales sin inicializar (basura de la pila). En el
+         * caso de factorial, "n" quedaba con un valor arbitrario en vez de
+         * 5, por lo que la condicion "i <= n" del do-while podia tardar
+         * muchisimas iteraciones (o comportarse de forma inconsistente)
+         * antes de volverse falsa -- percibido como un "bucle infinito".
+         *
+         * Correccion: usamos el contexto posicional real en vez de buscar
+         * un substring que nunca esta presente. inFormalParamZone es true
+         * SOLO mientras estamos leyendo, inmediatamente despues de la
+         * etiqueta de una funcion, su lista de parametros formales. En
+         * cuanto aparece la primera linea que no es "param_" (es decir, en
+         * cuanto inicia el cuerpo real de la funcion), la zona se cierra y
+         * ya NUNCA vuelve a abrirse hasta la proxima etiqueta de funcion.
+         * Por lo tanto, cualquier "param_" visto fuera de esa zona es,
+         * inequivocamente, un parametro ACTUAL de una llamada pendiente.
+         */
         if (ln.startsWith("param_") && !ln.contains("=")) {
+            if (inFormalParamZone) {
+                // 4. Parametro formal en definicion de funcion: ignorar
+                // (su slot en el frame ya se reservo en firstPass/copyArgsToFrame).
+                return;
+            }
+            // 5. Parametro actual antes de un call: acumular para emitCall().
             String[] p    = ln.split("\\s+", 2);
             String   tipo = extractParamType(p[0]);
             String   val  = p.length > 1 ? p[1] : "0";
             pendingParams.add(new String[]{ tipo, val });
             return;
         }
+
+        // [FIX-PARAM] Cualquier otra linea (que no sea "param_" sin "=")
+        // marca el fin de la zona de parametros formales, si aun estaba abierta.
+        inFormalParamZone = false;
 
         // 6. goto
         if (ln.startsWith("goto ")) {
@@ -680,12 +857,53 @@ public class MipsGenerator {
     // =================================================================
     //  PROLOGO Y EPILOGO
     // =================================================================
+    /**
+     * [FIX-FRAME] CORRECCION DE BUG CRITICO: colision de memoria entre
+     * $ra/$fp guardados y las variables/parametros del frame.
+     *
+     * Version anterior:
+     *     addi $sp, $sp, -total
+     *     sw   $ra, total-4($sp)
+     *     sw   $fp, total-8($sp)
+     *     addi $fp, $sp, total
+     *
+     * Como $fp = $sp + total, las direcciones "total-4($sp)" y
+     * "total-8($sp)" equivalen exactamente a "$fp - 4" y "$fp - 8".
+     * PERO esas mismas dos direcciones ($fp-4 y $fp-8) son tambien los
+     * offsets que curOff le asigna a las PRIMERAS variables/parametros
+     * declaradas en la funcion (por ejemplo, en "factorial(n)" el
+     * parametro "n" vive en fp-4 y la variable "resultado" en fp-8).
+     *
+     * Resultado real observado: al guardar "n" con "sw $a0, -4($fp)",
+     * se sobreescribia la direccion de retorno ($ra) guardada en el
+     * prologo. Al actualizar "resultado" con "sw ..., -8($fp)", se
+     * sobreescribia el $fp del caller. El cuerpo de la funcion (el
+     * do-while) calculaba todo correctamente en memoria/registros, pero
+     * al llegar al "jr $ra" en el epilogo, $ra ya no contenia la
+     * direccion de retorno real sino el valor de "n" (5), y saltar ahi
+     * colgaba/crasheaba la ejecucion en QtSpim (visto como "bucle
+     * infinito" en la prueba de factorial).
+     *
+     * Correccion: $ra y $fp(anterior) ahora se guardan en la zona MAS
+     * PROFUNDA del frame (los primeros 8 bytes desde $sp, offsets 0 y 4
+     * respecto a $sp), una region separada y exclusiva que NUNCA se
+     * solapa con los offsets negativos respecto a $fp que usa curOff
+     * para variables/parametros/temporales (que siempre empiezan en
+     * fp-4 y van decreciendo). $fp sigue apuntando al tope del frame
+     * (fp = sp + total), por lo que ninguno de los offsets ya generados
+     * para variables (relativos a $fp) cambia.
+     */
     private void emitPrologue(String fn) {
         // OPT #3: limpiar cache al entrar a nueva funcion
         invalidateRegCache();
 
         curFunc = fn;
         curOff  = funcOffsets.getOrDefault(fn, new LinkedHashMap<>());
+
+        // [FIX-PARAM] Al entrar a una funcion, las siguientes lineas "param_"
+        // (si las hay) son necesariamente parametros FORMALES de esta funcion,
+        // hasta que aparezca la primera linea que no sea "param_".
+        inFormalParamZone = true;
 
         int vars  = curOff.isEmpty() ? 0
                   : -curOff.values().stream().mapToInt(v -> v).min().orElse(0);
@@ -695,8 +913,10 @@ public class MipsGenerator {
         textSec.append(fn).append(":\n");
         textSec.append("    # -- antes de ").append(fn).append(" --\n");
         textSec.append("    addi $sp, $sp, -").append(total).append("\n");
-        textSec.append("    sw   $ra, ").append(total - 4).append("($sp)\n");
-        textSec.append("    sw   $fp, ").append(total - 8).append("($sp)\n");
+        // [FIX-FRAME] $ra y $fp(anterior) van en la zona baja del frame
+        // (offsets 0 y 4 desde $sp), separada de las variables.
+        textSec.append("    sw   $ra, 0($sp)\n");
+        textSec.append("    sw   $fp, 4($sp)\n");
         textSec.append("    addi $fp, $sp, ").append(total).append("\n");
 
         // OPT #6: en main no hay parametros que copiar
@@ -711,8 +931,10 @@ public class MipsGenerator {
         invalidateRegCache();
         int total = frameSz.getOrDefault(curFunc, 8);
         textSec.append("    # -- despues de ").append(curFunc).append(" --\n");
-        textSec.append("    lw   $ra, ").append(total - 4).append("($sp)\n");
-        textSec.append("    lw   $fp, ").append(total - 8).append("($sp)\n");
+        // [FIX-FRAME] Leer $ra/$fp de la misma zona dedicada (offsets 0 y 4
+        // desde $sp) donde el prologo los guardo.
+        textSec.append("    lw   $ra, 0($sp)\n");
+        textSec.append("    lw   $fp, 4($sp)\n");
         textSec.append("    addi $sp, $sp, ").append(total).append("\n");
         if ("main".equals(curFunc)) {
             textSec.append("    j    _exit_\n");
@@ -722,6 +944,22 @@ public class MipsGenerator {
     }
 
     /** Copia los argumentos recibidos ($a0..$a3) a sus slots en la pila local. */
+    /**
+     * [FIX-PARAM] Copia $a0..$a3 a los slots de los parametros formales.
+     *
+     * Bug latente corregido: la version anterior escaneaba TODO el cuerpo
+     * de la funcion (desde su etiqueta hasta la siguiente etiqueta de
+     * funcion) buscando lineas "param_" sin "=", sin distinguir si esas
+     * lineas eran parametros FORMALES (al inicio de la funcion) o
+     * parametros ACTUALES de alguna llamada hecha DENTRO del cuerpo de esta
+     * misma funcion (ej. si "factorial" llamara a otra funcion con
+     * argumentos). En ese caso, los parametros actuales de la llamada
+     * interna se contarian incorrectamente como si fueran parametros
+     * formales adicionales de "fn", generando "sw $aX, ..." erroneos.
+     *
+     * Correccion: nos detenemos en cuanto aparece la primera linea que NO
+     * es un "param_" formal, igual que en translate()/firstPass().
+     */
     private void copyArgsToFrame(String fn) {
         boolean inFunc = false;
         int     idx    = 0;
@@ -739,7 +977,11 @@ public class MipsGenerator {
                            .append(", ").append(off).append("($fp)\n");
                 }
                 idx++;
+                continue;
             }
+            // [FIX-PARAM] La primera linea que no sea un parametro formal
+            // marca el fin de la lista de parametros formales de esta funcion.
+            break;
         }
     }
 
@@ -906,18 +1148,63 @@ public class MipsGenerator {
         putType(dst, "float");
     }
 
-    /** Potencia entera por bucle: base=ra, exp=rb -> result=res. */
-    private void emitPower(String base, String exp, String res) {
+    /**
+     * Potencia entera por bucle: base=baseReg, exp=expReg -> result=destReg.
+     *
+     * [FIX-POWER] CORRECCION DE BUG: version anterior reutilizaba directamente
+     * los registros que el allocador le asigno a destino (res), base y
+     * exponente, ejecutando dentro del bucle:
+     *
+     *     li   res, 1
+     *     loop: beq exp, zero, end
+     *           mul res, res, base
+     *           addi exp, exp, -1
+     *           j loop
+     *
+     * El problema es que esto NO es una instruccion atomica de MIPS, sino un
+     * bucle de varias instrucciones que LEE y ESCRIBE el mismo registro en
+     * pasos separados. Si el allocador de registros (allocReg) le asignaba a
+     * "res" el MISMO registro fisico que ya tenia "exp" o "base" (algo que
+     * puede pasar legitimamente cuando el pool de registros esta ocupado por
+     * otras variables vivas), el "li res, 1" sobrescribia el exponente ANTES
+     * de poder usarlo, o el "mul res, res, base" corrompia el contador a
+     * mitad de las iteraciones. Resultado real observado: el contador del
+     * exponente dejaba de decrecer hacia 0 y el programa quedaba en un bucle
+     * infinito en QtSpim (visto con el test "a <- 2 ^ 3").
+     *
+     * La correccion: el bucle ya NO opera sobre los registros que vengan del
+     * allocador. En su lugar:
+     *   1. Se copian base y exponente a un PAR de registros dedicados y
+     *      reservados solo para este calculo ($t8 y $t9), que nunca se usan
+     *      en otro lugar del generador para variables/temporales normales.
+     *   2. El acumulador del resultado tambien vive en un registro dedicado
+     *      ($t6) distinto de los anteriores, evitando cualquier alias.
+     *   3. Solo AL FINAL, una vez terminado el bucle, se copia el resultado
+     *      del acumulador dedicado al registro destino real (destReg) con
+     *      un "move". Asi, aunque destReg coincida con baseReg o expReg, ya
+     *      no importa: para entonces el bucle ya termino de usarlos.
+     */
+    private void emitPower(String baseReg, String expReg, String destReg) {
         String lp  = "_powL" + lblCount;
         String end = "_powE" + lblCount++;
-        textSec.append("    li   ").append(res).append(", 1\n");
+
+        // 1. Copiar base y exponente a registros dedicados y aislados,
+        //    para que el bucle nunca pueda pisar el registro destino real
+        //    ni los registros originales de base/exponente del caller.
+        textSec.append("    move $t8, ").append(baseReg).append("\n"); // base segura
+        textSec.append("    move $t9, ").append(expReg).append("\n");  // exponente seguro (seguira decreciendo)
+        textSec.append("    li   $t6, 1\n");                           // acumulador seguro, inicia en 1
+
         textSec.append(lp).append(":\n");
-        textSec.append("    beq  ").append(exp).append(", $zero, ").append(end).append("\n");
-        textSec.append("    mul  ").append(res).append(", ").append(res)
-               .append(", ").append(base).append("\n");
-        textSec.append("    addi ").append(exp).append(", ").append(exp).append(", -1\n");
+        textSec.append("    beq  $t9, $zero, ").append(end).append("\n");
+        textSec.append("    mul  $t6, $t6, $t8\n");
+        textSec.append("    addi $t9, $t9, -1\n");
         textSec.append("    j    ").append(lp).append("\n");
         textSec.append(end).append(":\n");
+
+        // 2. Recien aqui, con el bucle ya terminado, se copia el resultado
+        //    final al registro destino real que espera el resto del codigo.
+        textSec.append("    move ").append(destReg).append(", $t6\n");
     }
 
     // =================================================================

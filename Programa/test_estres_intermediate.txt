@@ -1,0 +1,298 @@
+factorial:
+param_1_int n
+t1 = 0
+var_1_int r
+r = t1
+t2 = n
+t3 = 1
+t4 = t2 <= t3
+ifFalse t4 goto factorial_else1
+factorial_if1:
+t5 = 1
+r = t5
+goto factorial_endif1
+factorial_else1:
+t6 = n
+t7 = n
+t8 = 1
+t9 = t7 - t8
+param_1_int t9
+t10 = call factorial, 1
+t11 = t6 * t10
+r = t11
+factorial_endif1:
+t12 = r
+return t12
+clasificar:
+param_1_int a
+param_2_int b
+param_3_int c
+param_4_int d
+t13 = 0
+var_2_int resultado
+resultado = t13
+t14 = a
+t15 = b
+t16 = t14 > t15
+ifFalse t16 goto clasificar_else1
+clasificar_if1:
+t17 = b
+t18 = c
+t19 = t17 > t18
+ifFalse t19 goto clasificar_else2
+clasificar_if2:
+t20 = c
+t21 = d
+t22 = t20 > t21
+ifFalse t22 goto clasificar_else3
+clasificar_if3:
+t23 = d
+t24 = 0
+t25 = t23 == t24
+ifFalse t25 goto clasificar_else4
+clasificar_if4:
+clasificar_do1:
+t26 = a
+t27 = 1
+tsw1 = t27
+goto clasificar_do1_switch1_case1
+t28 = 1
+
+clasificar_do1_switch1_case1:
+t29 = tsw1
+t30 = 0
+t31 = t29 == t30
+if t31 goto clasificar_do1_switch1_case1_b
+t32 = 1
+t33 = t26 == t32
+if t33 goto clasificar_do1_switch1_case1_b
+goto clasificar_do1_switch1_case1_end
+
+clasificar_do1_switch1_case1_b:
+t34 = 0
+tsw1 = t34
+t35 = resultado
+t36 = 1
+t37 = t35 + t36
+resultado = t37
+goto clasificar_do1_switch1_end
+
+clasificar_do1_switch1_case1_end:
+goto clasificar_do1_switch1_case2
+t38 = 2
+
+clasificar_do1_switch1_case2:
+t39 = tsw1
+t40 = 0
+t41 = t39 == t40
+if t41 goto clasificar_do1_switch1_case2_b
+t42 = 2
+t43 = t26 == t42
+if t43 goto clasificar_do1_switch1_case2_b
+goto clasificar_do1_switch1_case2_end
+
+clasificar_do1_switch1_case2_b:
+t44 = 0
+tsw1 = t44
+t45 = resultado
+t46 = 2
+t47 = t45 + t46
+resultado = t47
+goto clasificar_do1_switch1_end
+
+clasificar_do1_switch1_case2_end:
+goto clasificar_do1_switch1_default
+
+clasificar_do1_switch1_default:
+t48 = tsw1
+t49 = 0
+t50 = t48 == t49
+if t50 goto clasificar_do1_switch1_default_end
+goto clasificar_do1_switch1_default_b
+
+clasificar_do1_switch1_default_b:
+t51 = 0
+tsw1 = t51
+t52 = resultado
+t53 = 0
+t54 = t52 != t53
+ifFalse t54 goto clasificar_else5
+clasificar_if5:
+t55 = resultado
+t56 = 2
+t57 = t55 * t56
+resultado = t57
+goto clasificar_endif5
+clasificar_else5:
+t58 = resultado
+t59 = 1
+t60 = t58 - t59
+resultado = t60
+clasificar_endif5:
+goto clasificar_do1_switch1_default_end
+
+clasificar_do1_switch1_default_end:
+goto clasificar_do1_switch1_end
+clasificar_do1_switch1_end:
+t61 = a
+t62 = 1
+t63 = t61 - t62
+a = t63
+t64 = a
+t65 = 0
+t66 = t64 > t65
+if t66 goto clasificar_do1
+clasificar_do1_end:
+goto clasificar_endif4
+clasificar_else4:
+t67 = 100
+resultado = t67
+clasificar_endif4:
+goto clasificar_endif3
+clasificar_else3:
+t68 = a
+t69 = d
+t70 = t68 < t69
+ifFalse t70 goto clasificar_else6
+clasificar_if6:
+t71 = 200
+resultado = t71
+goto clasificar_endif6
+clasificar_else6:
+t72 = 300
+resultado = t72
+clasificar_endif6:
+clasificar_endif3:
+goto clasificar_endif2
+clasificar_else2:
+t73 = 400
+resultado = t73
+clasificar_endif2:
+goto clasificar_endif1
+clasificar_else1:
+t74 = a
+t75 = b
+t76 = t74 == t75
+ifFalse t76 goto clasificar_else7
+clasificar_if7:
+t77 = b
+t78 = c
+t79 = t77 == t78
+ifFalse t79 goto clasificar_else8
+clasificar_if8:
+t80 = c
+t81 = d
+t82 = t80 == t81
+ifFalse t82 goto clasificar_else9
+clasificar_if9:
+t83 = 9999
+resultado = t83
+goto clasificar_endif9
+clasificar_else9:
+t84 = 500
+resultado = t84
+clasificar_endif9:
+goto clasificar_endif8
+clasificar_else8:
+t85 = 600
+resultado = t85
+clasificar_endif8:
+goto clasificar_endif7
+clasificar_else7:
+t86 = 700
+resultado = t86
+clasificar_endif7:
+clasificar_endif1:
+t87 = resultado
+return t87
+main:
+t88 = 10
+var_3_int x
+x = t88
+t89 = 5
+var_4_int y
+y = t89
+t90 = 3
+var_5_int z
+z = t90
+t91 = 0
+var_6_int w
+w = t91
+t92 = 0
+var_7_int salida
+salida = t92
+t93 = 0
+var_8_int fact
+fact = t93
+t94 = true
+var_9_bool flag
+flag = t94
+t95 = x
+t96 = y
+t97 = z
+t98 = w
+param_1_int t95
+param_2_int t96
+param_3_int t97
+param_4_int t98
+t99 = call clasificar, 4
+salida = t99
+t100 = salida
+write,int,t100
+t101 = 5
+param_1_int t101
+t102 = call factorial, 1
+fact = t102
+t103 = fact
+write,int,t103
+t104 = flag
+t105 = !t104
+t106 = !t105
+t107 = x
+t108 = y
+t109 = t107 + t108
+t110 = z
+t111 = w
+t112 = t110 - t111
+t113 = t109 * t112
+t114 = 2
+t115 = t113 ^ t114
+t116 = 0
+t117 = t115 > t116
+t118 = fact
+t119 = 1
+t120 = t118 < t119
+t121 = t117 || t120
+t122 = t106 && t121
+ifFalse t122 goto main_else10
+main_if10:
+t123 = salida
+t124 = 2
+t125 = t123 % t124
+t126 = 0
+t127 = t125 == t126
+ifFalse t127 goto main_else11
+main_if11:
+t128 = fact
+t129 = 100
+t130 = t128 >= t129
+ifFalse t130 goto main_else12
+main_if12:
+t131 = fact
+write,int,t131
+goto main_endif12
+main_else12:
+t132 = salida
+write,int,t132
+main_endif12:
+goto main_endif11
+main_else11:
+t133 = 0
+write,int,t133
+main_endif11:
+goto main_endif10
+main_else10:
+t134 = 1
+t135 = -t134
+write,int,t135
+main_endif10:
