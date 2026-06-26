@@ -1,20 +1,5 @@
 empty~__main__<||>|:
-    cout~<|"asig a"|>!
-    int~a!
-    cout~<|"asig b"|>!
-    int~b!
-    cout~<|"asig c"|>!
-    int~c!
-    
-    cout~<|"a = 10"|>!
-    a<- 10!
-    cout~<|a|>!
-    cout~<|"b = 5"|>!
-    b<- 5!
-    cout~<|b|>!
-    cout~<|"c = a + b"|>!
-    c<- a + b!
-    
-    cout~<|"El resultado en c es: "|>!
-    cout~<|c|>!
+    int~a<<4>><<4>>!
+    a<<3>><<2>><- 1!
+    cout~<|a<<3>><<2>>|>!
 :|

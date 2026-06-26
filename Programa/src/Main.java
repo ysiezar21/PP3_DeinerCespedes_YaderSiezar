@@ -8,6 +8,7 @@
 
 import java.io.*;
 import java_cup.runtime.*;
+import java.util.*;
 
 public class Main {
     public static void main(String[] args) {
@@ -21,51 +22,77 @@ public class Main {
         String tokenFile  = baseName + "_tokens.txt";
         String symbolFile = baseName + "_symbols.txt";
 
-        try {
-            Lexer.initTokenWriter(tokenFile);
-            Lexer.initSymbolWriter(symbolFile);
-
-            FileReader reader = new FileReader(sourceFile);
-            Lexer  lexer  = new Lexer(reader);
-            Parser parser = new Parser(lexer);
-            parser.sourceFileName = baseName;
-
-            System.out.println("Analizando: " + sourceFile);
-            System.out.println("==============================");
-            parser.parse();
-            System.out.println("==============================");
-
-            boolean ok = (parser.errorCount == 0 && parser.semErrorCount == 0);
-            if (ok) {
-                System.out.println("Resultado: El archivo Si puede ser generado por la gramatica.");
-
-                // Generacion de codigo MIPS
-                MipsGenerator mipsGen = new MipsGenerator(
-                        parser.getIntermediateCode(), baseName);
+        if (sourceFile.contains("_intermediate.txt")){
+            List<String> intermediateCode = new ArrayList<>();
+            System.out.println("=====================================================================");
+            System.out.println("Generando codigo MIPS a partir del archivo intermedio: " + sourceFile);
+            System.out.println("=====================================================================");
+            try (BufferedReader br = new BufferedReader(new FileReader(sourceFile))) {
+                String line;
+                while ((line = br.readLine()) != null) {
+                    intermediateCode.add(line);
+                }
+            } catch (IOException e) {
+                System.err.println("Error leyendo el archivo intermedio: " + e.getMessage());
+                System.exit(1);
+            }
+            MipsGenerator mipsGen = new MipsGenerator(intermediateCode, baseName);
+            try {
                 mipsGen.generate();
-
-            } else {
-                System.out.println("Resultado: El archivo NO puede ser generado por la gramatica.");
-                if (parser.errorCount > 0)
-                    System.out.println("  Errores sintacticos : " + parser.errorCount);
-                if (parser.semErrorCount > 0)
-                    System.out.println("  Errores semanticos  : " + parser.semErrorCount);
+            } catch (IOException e) {
+                System.err.println("Error generando el codigo MIPS: " + e.getMessage());
+                System.exit(1);
             }
 
-            System.out.println("Archivos generados:");
-            System.out.println("  Tokens     -> " + tokenFile);
-            System.out.println("  Simbolos   -> " + symbolFile);
-            System.out.println("  Intermedio -> " + baseName + "_intermediate.txt");
-            System.out.println("  MIPS       -> " + baseName + "_mips.asm");
+        }else{
+            try {
+                Lexer.initTokenWriter(tokenFile);
+                Lexer.initSymbolWriter(symbolFile);
 
-        } catch (FileNotFoundException e) {
-            System.err.println("Error: Archivo no encontrado - " + sourceFile);
-        } catch (Exception e) {
-            System.err.println("Error durante el analisis: " + e.getMessage());
-            e.printStackTrace();
-        } finally {
-            Lexer.closeTokenWriter();
-            Lexer.closeSymbolWriter();
+                FileReader reader = new FileReader(sourceFile);
+                Lexer  lexer  = new Lexer(reader);
+                Parser parser = new Parser(lexer);
+                parser.sourceFileName = baseName;
+
+                System.out.println("Analizando: " + sourceFile);
+                System.out.println("==============================");
+                parser.parse();
+                System.out.println("==============================");
+
+                boolean ok = (parser.errorCount == 0 && parser.semErrorCount == 0);
+                if (ok) {
+                    System.out.println("Resultado: El archivo Si puede ser generado por la gramatica.");
+
+                    // Generacion de codigo MIPS
+                    MipsGenerator mipsGen = new MipsGenerator(
+                            parser.getIntermediateCode(), baseName);
+                    mipsGen.generate();
+
+                } else {
+                    System.out.println("Resultado: El archivo NO puede ser generado por la gramatica.");
+                    if (parser.errorCount > 0)
+                        System.out.println("  Errores sintacticos : " + parser.errorCount);
+                    if (parser.semErrorCount > 0)
+                        System.out.println("  Errores semanticos  : " + parser.semErrorCount);
+                }
+
+                System.out.println("Archivos generados:");
+                System.out.println("  Tokens     -> " + tokenFile);
+                System.out.println("  Simbolos   -> " + symbolFile);
+                System.out.println("  Intermedio -> " + baseName + "_intermediate.txt");
+                System.out.println("  MIPS       -> " + baseName + "_mips.asm");
+
+            } catch (FileNotFoundException e) {
+                System.err.println("Error: Archivo no encontrado - " + sourceFile);
+            } catch (Exception e) {
+                System.err.println("Error durante el analisis: " + e.getMessage());
+                e.printStackTrace();
+            } finally {
+                Lexer.closeTokenWriter();
+                Lexer.closeSymbolWriter();
+            }
+
         }
+
     }
 }

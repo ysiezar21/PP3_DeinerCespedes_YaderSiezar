@@ -1,6 +1,6 @@
 # ============================================================
 # Código MIPS generado por MipsGenerator (optimizado)
-# Fuente: test
+# Fuente: test_intermediate
 # ============================================================
 
 .data
